@@ -1,256 +1,56 @@
-# 📖 Documentation Complète du Projet Zed
+# 📖 Guide d'Implémentation d'Agent IA pour Zed
 
-Ce document fournit une analyse détaillée de l'architecture, de la structure et des composants clés du projet Zed. Il est conçu pour aider les nouveaux développeurs à comprendre rapidement la base de code.
+Ce document fournit une spécification technique détaillée et un guide pratique pour construire un serveur LLM externe capable de s'intégrer avec les fonctionnalités d'agent de Zed, notamment pour l'édition de fichiers. Il est le résultat d'une analyse approfondie du code source de Zed et vise à fournir une solution "infaillible" pour les développeurs.
 
 ## 📝 Table des Matières
 
-- [1. Architecture Générale](#1-architecture-générale)
-- [2. Arborescence du Projet](#2-arborescence-du-projet)
-- [3. Analyse des Dossiers Principaux](#3-analyse-des-dossiers-principaux)
-- [4. Analyse des Fichiers Critiques](#4-analyse-des-fichiers-critiques)
-- [5. Analyse des Composants Clés (Crates)](#5-analyse-des-composants-clés-crates)
-- [6. Tableau Récapitulatif des Modules](#6-tableau-récapitulatif-des-modules)
-- [7. Deep Dive: Opérations sur le Système de Fichiers](#7-deep-dive-opérations-sur-le-système-de-fichiers)
-- [8. Spécification Technique: Intégration d'un Agent IA](#8-spécification-technique-intégration-dun-agent-ia)
-  - [8.1. Le Protocole ACP (Agent Client Protocol)](#81-le-protocole-acp-agent-client-protocol)
-  - [8.2. Structure des Messages ACP](#82-structure-des-messages-acp)
-  - [8.3. Spécification de la Commande `edit_file`](#83-spécification-de-la-commande-edit_file)
-  - [8.4. Workflow de Confirmation et Gestion des Erreurs](#84-workflow-de-confirmation-et-gestion-des-erreurs)
-  - [8.5. Guide Pratique: Créer un Faux Serveur LLM](#85-guide-pratique-créer-un-faux-serveur-llm)
-- [9. Conclusion et Améliorations Possibles](#9-conclusion-et-améliorations-possibles)
+- [1. L'Architecture Réelle : Agent Rust Intégré](#1-larchitecture-réelle--agent-rust-intégré)
+- [2. Spécification de l'API du Serveur Externe](#2-spécification-de-lapi-du-serveur-externe)
+  - [2.1. Endpoint et Méthode](#21-endpoint-et-méthode)
+  - [2.2. Format de la Réponse : Server-Sent Events (SSE)](#22-format-de-la-réponse--server-sent-events-sse)
+  - [2.3. Structure des Données SSE](#23-structure-des-données-sse)
+- [3. La Solution au "Problème de la Boucle" : Terminaison du Stream](#3-la-solution-au-problème-de-la-boucle--terminaison-du-stream)
+- [4. Exemple Pratique : Serveur Node.js Fonctionnel](#4-exemple-pratique--serveur-nodejs-fonctionnel)
+- [5. Configuration et Débogage](#5-configuration-et-débogage)
+  - [5.1. Configurer Zed](#51-configurer-zed)
+  - [5.2. Stratégie de Débogage](#52-stratégie-de-débogage)
 
 ---
 
-## 1. Architecture Générale
+## 1. L'Architecture Réelle : Agent Rust Intégré
 
-Le projet Zed est un **monorepo Rust** structuré autour d'un **espace de travail (workspace) Cargo**. Cette approche centralise tout le code, y compris le cœur de l'éditeur, les extensions et les outils, dans un seul et même dépôt Git.
+Contrairement à ce que l'on pourrait penser, l'agent qui interagit avec les API compatibles OpenAI **n'est pas un script externe modifiable (comme un `index.js`)**. L'analyse du code source de Zed (`crates/language_models/src/provider/open_ai.rs`) révèle que le client OpenAI est un **composant Rust intégré directement dans Zed**.
 
-L'architecture peut être décrite comme une application **modulaire et pilotée par les événements**, construite sur un **framework d'interface utilisateur (UI) personnalisé et performant**.
+**Cela a une implication majeure :** vous ne pouvez pas modifier un script pour pointer vers votre serveur. À la place, vous devez construire un serveur qui **imite parfaitement l'API `v1/chat/completions` d'OpenAI**, puis configurer Zed pour qu'il utilise l'URL de votre serveur.
 
-Les piliers de l'architecture sont :
+Le flux de communication est donc :
+1.  **Zed (Client Rust interne)** envoie une requête HTTP à votre serveur.
+2.  **Votre Serveur** reçoit la requête et répond avec un flux de données (SSE).
+3.  **Zed (Client Rust interne)** parse le flux SSE, et lorsque des `tool_calls` sont détectés et que le flux se termine correctement, il les traduit en actions internes (comme l'édition de fichiers).
 
-1.  **`gpui` (GPU-accelerated UI)** : Le framework UI maison, responsable de tout le rendu, de la gestion des fenêtres et des événements.
-2.  **`project`** : Le modèle de données, gérant l'accès aux fichiers, Git et les serveurs de langage (LSP).
-3.  **`workspace`** : Le contrôleur de fenêtre, orchestrant les panneaux (`Pane`), les docks, et les "items".
-4.  **`editor`** : La vue principale pour l'édition de texte.
+Il n'y a **pas de couche de traduction intermédiaire ACP (Agent Client Protocol) ou de CLI externe** pour le fournisseur OpenAI. Le client Rust de Zed gère directement la communication et la traduction.
 
----
+## 2. Spécification de l'API du Serveur Externe
 
-## 2. Arborescence du Projet
+Pour que Zed puisse communiquer avec votre serveur, celui-ci doit respecter scrupuleusement la spécification suivante.
 
-```
-.
-├── 📄 Cargo.toml
-├── 🖼️ assets/
-├── 📦 crates/
-│   ├── 🚀 zed/
-│   ├── 🎨 gpui/
-│   ├── 🪟 workspace/
-│   ├── ✍️ editor/
-│   ├── 📂 project/
-│   └── ...
-├── 📚 docs/
-├── 🧩 extensions/
-├── 📜 script/
-└── 🔬 tooling/
-```
+### 2.1. Endpoint et Méthode
+- **Méthode :** `POST`
+- **Endpoint :** `/v1/chat/completions` (ou tout autre chemin correspondant à ce que vous configurez dans Zed)
 
----
+### 2.2. Format de la Réponse : Server-Sent Events (SSE)
+- **Header `Content-Type` :** Votre serveur **doit** renvoyer `text/event-stream`.
+- **Format des messages :** Chaque message envoyé doit être préfixé par `data: ` et se terminer par deux sauts de ligne (`\n\n`).
 
-## 3. Analyse des Dossiers Principaux
-*(Cette section reste inchangée, voir les versions précédentes pour le détail)*
+### 2.3. Structure des Données SSE
+Le JSON envoyé dans chaque message `data:` doit être un `chat.completion.chunk` d'OpenAI. Pour l'édition de fichiers, la structure la plus importante est `delta.tool_calls`.
 
----
-
-## 4. Analyse des Fichiers Critiques
-*(Cette section reste inchangée, voir les versions précédentes pour le détail)*
-
----
-
-## 5. Analyse des Composants Clés (Crates)
-*(Cette section reste inchangée, voir les versions précédentes pour le détail)*
-
----
-
-## 6. Tableau Récapitulatif des Modules
-*(Cette section reste inchangée, voir les versions précédentes pour le détail)*
-
----
-
-## 7. Deep Dive: Opérations sur le Système de Fichiers
-*(Cette section reste inchangée, voir les versions précédentes pour le détail)*
-
----
-
-## 8. Spécification Technique: Intégration d'un Agent IA
-
-Ce chapitre fournit les informations techniques nécessaires pour construire un serveur externe (par exemple, un faux LLM en Node.js) capable de communiquer avec Zed pour effectuer des modifications de fichiers.
-
-### 8.1. Le Protocole ACP (Agent Client Protocol)
-
-La communication entre Zed et ses agents IA (outils CLI externes) n'est **pas** directement une API REST de type OpenAI. Zed utilise un protocole intermédiaire appelé **Agent Client Protocol (ACP)**, qui fonctionne sur `stdin`/`stdout` avec des messages **JSON-RPC**.
-
-Le flux correct est le suivant :
-1.  **Zed** lance un outil CLI (l'agent, par exemple `@zed-ai/ucf`) en tant que sous-processus.
-2.  Cet **outil CLI** est responsable de contacter une API externe (comme OpenAI, ou votre faux serveur).
-3.  Votre **faux serveur** répond au CLI avec une réponse au format OpenAI standard (incluant des `tool_calls`).
-4.  L'**outil CLI** reçoit cette réponse et la **traduit** en un message au format **ACP**.
-5.  L'**outil CLI** écrit ce message ACP sur son `stdout`.
-6.  **Zed** lit ce message ACP et exécute l'action demandée.
-
-L'erreur courante est de croire que Zed consomme directement le format OpenAI. En réalité, il ne consomme que le format ACP.
-
-### 8.2. Structure des Messages ACP
-
-Le protocole est basé sur JSON-RPC 2.0. Voici les messages clés :
-
--   **`session/update`** : Notification envoyée par l'agent à Zed pour signaler un événement. C'est le message principal utilisé pour les `tool_calls`.
-
-**Exemple de message ACP pour un `tool_call` :**
+**Exemple de chunk de données pour un `tool_call` :**
 ```json
 {
-  "jsonrpc": "2.0",
-  "method": "session/update",
-  "params": {
-    "sessionId": "sess_abc123def456",
-    "update": {
-      "sessionUpdate": "tool_call",
-      "toolCallId": "call_001",
-      "title": "Édition du fichier de configuration",
-      "kind": "edit",
-      "status": "pending",
-      "content": [
-        {
-          "type": "diff",
-          "path": "/chemin/absolu/vers/le/fichier.js",
-          "oldText": "contenu original",
-          "newText": "nouveau contenu"
-        }
-      ]
-    }
-  }
-}
-```
-Le champ `content` de type `diff` est crucial pour les modifications de fichiers.
-
-### 8.3. Spécification de la Commande `edit_file`
-
-Lorsque l'agent CLI traduit un `tool_call` OpenAI en ACP, il se base sur la structure de l'outil `edit_file`. Voici les règles de validation strictes appliquées par Zed, trouvées dans `crates/assistant_tools/src/edit_file_tool.rs` :
-
-| Champ | Type | Obligatoire ? | Description |
-| :--- | :--- | :--- | :--- |
-| `display_description` | `string` | **Oui** | Description de l'édition, affichée dans l'UI. Doit apparaître en premier dans le JSON. |
-| `path` | `string` | **Oui** | Chemin relatif à la racine du projet. |
-| `mode` | `string` | **Oui** | Valeurs possibles : `"create"`, `"overwrite"`, `"edit"`. |
-| `content` | `string` | **Oui** (si mode=`create`\|`overwrite`) | Le contenu complet du fichier. |
-| `old_text` | `string` | **Oui** (si mode=`edit`) | Le contenu à remplacer (pour un patch). |
-| `new_text` | `string` | **Oui** (si mode=`edit`) | Le nouveau contenu (pour un patch). |
-
-**Multiples `tool_calls` :** Pour modifier plusieurs fichiers, le LLM doit renvoyer un tableau `tool_calls` contenant plusieurs objets, chacun avec un `index` unique.
-
-### 8.4. Workflow de Confirmation et Gestion des Erreurs
-
--   **Confirmation :** Zed peut demander une confirmation à l'utilisateur avant d'appliquer une modification si le chemin est sensible (par exemple, dans `.zed/` ou en dehors du projet). L'agent peut initier cette demande via la méthode ACP `session/request_permission`.
--   **Gestion des erreurs :** Si une modification échoue (par exemple, le fichier est vidé), c'est souvent dû à un `tool_call` mal formé ou à un problème dans la traduction OpenAI -> ACP par le CLI. Les logs de Zed sont le meilleur endroit pour diagnostiquer ces erreurs.
-
-### 8.5. Guide Pratique: Créer un Faux Serveur LLM
-
-#### 1. Où Trouver et Modifier l'Outil CLI
-Les agents CLI sont téléchargés par Zed dans :
--   **macOS :** `~/.zed/agents/`
--   **Linux :** `~/.config/zed/agents/`
--   **Windows :** `%APPDATA%\zed\agents\`
-
-Chaque dossier (par exemple, `@zed-ai/openai`) contient une application Node.js. Pour utiliser votre faux serveur, vous devez modifier le fichier `index.js` de l'agent :
-```javascript
-// Contenu typique de l'agent CLI
-// ...
-const baseURL = "https://api.openai.com"; // <-- LIGNE À MODIFIER
-
-// MODIFICATION REQUISE :
-const baseURL = "http://localhost:3000"; // <-- URL de votre serveur local
-// ...
-```
-
-#### 2. Débogage
--   **Logs de Zed :** `Help > Show Logs`. Cherchez des erreurs de parsing ACP.
--   **Logs du CLI :** Lancez Zed depuis un terminal pour voir la sortie `stdout` de l'agent.
--   **Tester le serveur :** Utilisez `curl` pour vérifier que votre serveur renvoie le bon format SSE.
-
----
-
-### 8.6. Modification Pratique du CLI
-
-Cette section fournit les étapes concrètes pour modifier l'agent CLI afin qu'il communique avec votre serveur local au lieu de l'API OpenAI officielle.
-
-#### 1. Identifier le CLI Actif et son Emplacement
-
-Zed télécharge les agents dans un répertoire spécifique. Pour trouver le bon agent à modifier (par exemple, `@zed-ai/openai` ou `@zed-ai/ucf`), vous devez d'abord lister le contenu de ce répertoire :
-
-```sh
-# Sur macOS
-ls ~/.zed/agents/
-
-# Sur Linux
-ls ~/.config/zed/agents/
-
-# Sur Windows (dans PowerShell)
-Get-ChildItem $env:APPDATA\zed\agents
-```
-
-Naviguez dans le dossier de l'agent que vous souhaitez utiliser (par exemple, `~/.zed/agents/@zed-ai/openai/`). Le fichier à modifier est `index.js`.
-
-#### 2. Modifier le Fichier `index.js`
-
-Ouvrez `index.js` et localisez la ligne où l'objet `OpenAI` est instancié. Vous devez changer le `baseURL` pour pointer vers votre serveur.
-
-**Code typique AVANT modification :**
-```javascript
-// Fichier: ~/.zed/agents/@zed-ai/openai/index.js
-
-// ... (autre code)
-
-const openai = new OpenAI({
-  baseURL: "https://api.openai.com/v1",  // <-- LIGNE À CHANGER
-  apiKey: process.env.OPENAI_API_KEY,
-  // ... autres options
-});
-
-// ... (autre code)
-```
-
-**Code APRÈS modification :**
-```javascript
-// Fichier: ~/.zed/agents/@zed-ai/openai/index.js
-
-// ... (autre code)
-
-const openai = new OpenAI({
-  baseURL: "http://localhost:3000/v1",   // <-- VOTRE SERVEUR LOCAL
-  apiKey: "fake-api-key", // La clé peut être factice si votre serveur ne la valide pas
-  // ... autres options
-});
-
-// ... (autre code)
-```
-**Important :** Le chemin `/v1` à la fin de l'URL est souvent nécessaire car le client OpenAI l'ajoute par défaut. Assurez-vous que votre serveur local gère cette route (par exemple, `POST /v1/chat/completions`).
-
-### 8.7. Ce que Fait le CLI en Interne : Traduction OpenAI → ACP
-
-Le rôle le plus important de l'agent CLI est de servir de **traducteur**. Il reçoit une réponse formatée selon la spécification OpenAI (avec des `tool_calls`) de votre serveur et la convertit en une série de messages ACP que Zed peut comprendre.
-
-Voici un exemple concret de ce flux de traduction pour un seul `tool_call` :
-
-#### Étape 1 : Le serveur répond au format OpenAI
-
-Votre serveur (par exemple, `http://localhost:3000`) renvoie un "chunk" Server-Sent Event (SSE) contenant un `tool_call`.
-
-**Réponse de votre serveur (format OpenAI) :**
-```json
-{
-  "id": "chatcmpl-...",
+  "id": "chatcmpl-unique-id",
   "object": "chat.completion.chunk",
-  "created": 1677652288,
+  "created": 1694268190,
   "model": "gpt-4",
   "choices": [
     {
@@ -263,7 +63,7 @@ Votre serveur (par exemple, `http://localhost:3000`) renvoie un "chunk" Server-S
             "type": "function",
             "function": {
               "name": "edit_file",
-              "arguments": "{\n  \"display_description\": \"Refactor the main function\",\n  \"path\": \"src/main.js\",\n  \"mode\": \"edit\",\n  \"old_text\": \"console.log(\\\"hello world\\\");\",\n  \"new_text\": \"console.log(\\\"Hello, World!\\\");\"\n}"
+              "arguments": "{\\"path\\":\\"file.txt\\",\\"mode\\":\\"overwrite\\",\\"content\\":\\"Nouveau contenu\\"}"
             }
           }
         ]
@@ -273,97 +73,207 @@ Votre serveur (par exemple, `http://localhost:3000`) renvoie un "chunk" Server-S
   ]
 }
 ```
+- **Important :** Les arguments de la fonction (`arguments`) doivent être une chaîne de caractères JSON échappée.
 
-#### Étape 2 : Le CLI traduit en message ACP
+## 3. La Solution au "Problème de la Boucle" : Terminaison du Stream
 
-L'agent CLI (`index.js`) reçoit ce JSON. Il l'analyse, extrait les informations du `tool_call` et construit un message ACP `session/update`.
+L'analyse du code Rust de Zed (`OpenAiEventMapper::map_event`) montre que Zed attend un signal très spécifique pour savoir que la liste des `tool_calls` est terminée. Sans ce signal, Zed attend indéfiniment, ce qui provoque une boucle apparente ou un blocage.
 
-**Message écrit par le CLI sur `stdout` (format ACP) :**
+Pour terminer correctement le stream, votre serveur **doit** envoyer deux derniers messages dans cet ordre :
+
+**1. Le Chunk de Fin de `tool_calls` :**
+Un chunk contenant `finish_reason: "tool_calls"`. Ce message indique à Zed qu'il ne recevra plus de nouveaux `tool_calls`.
+
 ```json
 {
-  "jsonrpc": "2.0",
-  "method": "session/update",
-  "params": {
-    "sessionId": "sess_xyz789",
-    "update": {
-      "sessionUpdate": "tool_call",
-      "toolCallId": "call_abc123",
-      "title": "Refactor the main function",
-      "kind": "edit",
-      "status": "pending",
-      "content": [
-        {
-          "type": "diff",
-          "path": "src/main.js",
-          "oldText": "console.log(\"hello world\");",
-          "newText": "console.log(\"Hello, World!\");"
-        }
-      ]
+  "id": "chatcmpl-unique-id",
+  "object": "chat.completion.chunk",
+  "created": 1694268190,
+  "model": "gpt-4",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {},
+      "finish_reason": "tool_calls"
     }
+  ]
+}
+```
+
+**2. Le Message de Fin de Stream `[DONE]` :**
+Le message final et standard pour les flux SSE d'OpenAI.
+
+```
+data: [DONE]
+```
+
+**Workflow complet du stream :**
+1.  Envoyer un ou plusieurs chunks `data:` contenant les `tool_calls`.
+2.  Envoyer un chunk `data:` avec `finish_reason: "tool_calls"`.
+3.  Envoyer `data: [DONE]\n\n`.
+4.  Clore la connexion.
+
+Le respect de cette séquence est **la clé absolue** pour que l'intégration fonctionne.
+
+## 4. Exemple Pratique : Serveur Node.js Fonctionnel
+
+Voici un code de serveur Node.js complet et fonctionnel qui implémente la spécification ci-dessus, y compris la gestion correcte de la fin de stream.
+
+```javascript
+// fixed_fake_openai_server.js
+const http = require('http');
+
+const server = http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url.endsWith('/v1/chat/completions')) {
+        console.log("Received request from Zed.");
+
+        // 1. Set SSE headers
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        // 2. Define the tool call payload
+        const toolCallPayload = {
+            id: `chatcmpl-${Date.now()}`,
+            object: "chat.completion.chunk",
+            created: Math.floor(Date.now() / 1000),
+            model: "gpt-4-bulletproof",
+            choices: [{
+                index: 0,
+                delta: {
+                    tool_calls: [{
+                        index: 0,
+                        id: `call_${Date.now()}`,
+                        type: "function",
+                        function: {
+                            name: "edit_file",
+                            arguments: JSON.stringify({
+                                display_description: "Replace content of test.js",
+                                path: "test.js",
+                                mode: "overwrite",
+                                content: `console.log("Hello from the reverse-engineered server at ${new Date().toLocaleTimeString()}");`
+                            })
+                        }
+                    }]
+                },
+                finish_reason: null
+            }]
+        };
+
+        // 3. Define the final chunk with the critical `finish_reason`
+        const finalChunkPayload = {
+            id: toolCallPayload.id,
+            object: "chat.completion.chunk",
+            created: toolCallPayload.created,
+            model: toolCallPayload.model,
+            choices: [{
+                index: 0,
+                delta: {},
+                finish_reason: "tool_calls" // <-- The key to prevent loops!
+            }]
+        };
+
+        // 4. Write the chunks to the response stream
+        console.log("Sending tool_calls chunk...");
+        res.write(`data: ${JSON.stringify(toolCallPayload)}\n\n`);
+
+        console.log("Sending finish_reason chunk...");
+        res.write(`data: ${JSON.stringify(finalChunkPayload)}\n\n`);
+
+        console.log("Sending [DONE] message...");
+        res.write('data: [DONE]\n\n');
+
+        // 5. End the response
+        res.end();
+        console.log("Stream ended.");
+
+    } else {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found');
+    }
+});
+
+server.listen(3000, () => {
+    console.log('Bulletproof Fake OpenAI server for Zed running on http://localhost:3000');
+});
+```
+
+## 5. Configuration et Débogage
+
+### 5.1. Configurer Zed
+1.  Ouvrez vos paramètres Zed (`settings.json`).
+2.  Ajoutez ou modifiez la section `openai` pour pointer vers votre serveur local.
+
+```json
+{
+  // ... autres paramètres
+  "assistant": {
+    "version": "1",
+    "enabled": true,
+    "default_model": {
+      "provider": "openai",
+      "model": "gpt-4-bulletproof"
+    }
+  },
+  "openai": {
+    "api_url": "http://localhost:3000/v1"
   }
 }
 ```
-Ce message est ensuite envoyé à Zed, qui l'interprète pour afficher l'aperçu de la modification dans l'interface utilisateur.
+3. **Redémarrez Zed** pour vous assurer que les nouveaux paramètres sont pris en compte.
 
-### 8.8. Rechargement de l'Agent et Débogage
+### 5.2. Stratégie de Débogage
+Le débogage se fait principalement du côté de votre serveur.
 
-Modifier l'agent est une chose, mais s'assurer que Zed utilise bien votre version modifiée et comprendre ce qui se passe en cas de problème est tout aussi crucial.
+1.  **Logs du Serveur :** Lancez votre serveur Node.js dans un terminal. Ajoutez des `console.log` pour voir quand les requêtes arrivent et ce que votre serveur envoie. L'exemple ci-dessus inclut de tels logs.
+2.  **`curl` pour Tester :** Testez votre serveur indépendamment de Zed en utilisant `curl`.
+    ```sh
+    curl -N -X POST http://localhost:3000/v1/chat/completions
+    ```
+    - L'option `-N` (no-buffering) est importante pour voir les chunks SSE arriver en temps réel.
+    - Vérifiez que la sortie est exactement conforme à la spécification (les `data:`, les `\n\n`, et les deux derniers messages de fin).
+3.  **Logs de Zed :** Si votre serveur semble correct mais que rien ne se passe, consultez les logs de Zed (`Help > Show Logs`). Cherchez des erreurs de connexion réseau ou des erreurs de parsing JSON si votre serveur envoie un format inattendu.
 
-#### 1. Forcer le Rechargement de l'Agent
+### 5.3. Analyse des Logs de Zed (Exemples Réels)
 
-Après avoir modifié le fichier `index.js` d'un agent, Zed ne prendra pas automatiquement en compte les changements. L'agent est un processus externe qui est lancé au besoin.
+Lorsque le débogage côté serveur ne suffit pas, les logs de Zed peuvent révéler comment le client interne interprète (ou échoue à interpréter) la réponse de votre serveur.
 
-**La méthode la plus fiable pour forcer un rechargement est de redémarrer complètement Zed.**
+**Rappel :** Ouvrez les logs via `Help > Show Logs`.
 
-Une autre approche possible consiste à changer de modèle d'IA dans les paramètres de Zed, puis à revenir au modèle précédent. Cela peut parfois forcer Zed à relancer le processus de l'agent.
+#### Scénario 1 : Succès
 
-#### 2. Consulter les Logs de Zed
+Quand tout fonctionne, vous ne verrez probablement **pas d'erreur évidente**. Vous verrez plutôt des messages de routine indiquant le traitement des événements. Chercher le nom de votre outil (`edit_file`) peut être utile. Un log de succès est souvent silencieux.
 
-Les logs de Zed sont la source de vérité numéro un pour le débogage.
--   **Ouvrir les logs :** Allez dans le menu `Help > Show Logs`. Cela ouvrira le répertoire des logs de Zed.
--   **Quel fichier chercher :** Le fichier `zed.log` contient les informations les plus récentes.
--   **Quoi chercher dans les logs :**
-    -   Erreurs de parsing JSON : `error parsing json-rpc message` indique souvent un problème avec le format ACP que votre agent envoie.
-    -   Erreurs de `spawn`: Cherchez des lignes contenant `failed to spawn` pour voir si Zed n'arrive pas à lancer le processus de l'agent.
-    -   Messages de l'agent : `stdout` et `stderr` du processus de l'agent y sont souvent redirigés.
+#### Scénario 2 : Échec - JSON Malformé
 
-#### 3. Erreurs Courantes et Solutions
+Supposons que votre serveur envoie un JSON invalide dans le flux SSE (par exemple, avec une virgule en trop). Zed ne pourra pas le parser.
 
--   **Problème :** Le fichier est vidé (overwrite avec du contenu vide).
-    -   **Cause probable :** Le `tool_call` a été reçu, mais son contenu était mal formé ou vide. Votre serveur envoie probablement un `content: ""` ou une structure invalide.
-    -   **Solution :** Vérifiez la logique de votre serveur pour vous assurer que le champ `content` (ou `old_text`/`new_text`) est correctement rempli.
--   **Problème :** Rien ne se passe dans Zed.
-    -   **Cause probable :** L'agent n'a pas réussi à contacter votre serveur local, ou votre serveur n'a pas renvoyé une réponse SSE valide.
-    -   **Solution :** Vérifiez que votre serveur est en cours d'exécution et accessible. Testez le `baseURL` avec `curl` depuis votre terminal. Assurez-vous que votre serveur renvoie bien `data: [DONE]` à la fin du stream.
--   **Problème :** Une erreur "Permission Denied" apparaît dans l'UI de Zed.
-    -   **Cause probable :** Vous essayez de modifier un fichier en dehors de la racine du projet ou dans un répertoire protégé.
-    -   **Solution :** Vérifiez le `path` envoyé dans votre `tool_call`.
+**Ce que vous verrez dans `zed.log` :**
+Vous verrez une erreur provenant du `language_models` crate, probablement de `open_ai.rs` ou `serde_json`. Cherchez des mots-clés comme `ERROR`, `language_model`, `stream`, `deserialize`.
 
-#### 4. Tester l'Agent en Isolation
-
-Vous pouvez tester le script `index.js` de l'agent directement depuis votre terminal, sans passer par Zed. Cela vous permet de voir exactement ce qu'il envoie sur `stdout`.
-
-```sh
-# 1. Naviguez vers le répertoire de l'agent
-cd ~/.zed/agents/@zed-ai/openai/
-
-# 2. Lancez le script avec Node.js
-# Assurez-vous que votre serveur local est déjà en cours d'exécution !
-node index.js
+**Exemple de log d'erreur (simulé mais représentatif) :**
+```log
+[2023-10-27T10:30:05Z ERROR language_models::provider::open_ai] stream error: error deserializing response: Error("invalid type: map, expected a string", line: 1, column: 88)
 ```
-Le script va démarrer, attendre une entrée sur `stdin` (simulant Zed), contacter votre serveur, et imprimer le message ACP traduit sur la console. Cela vous permet de valider la logique de traduction sans l'interférence de Zed.
+ou
+```log
+[2023-10-27T10:32:15Z ERROR gpui::platform::mac] unhandled error on window thread: error calling update: error calling update: stream error: error deserializing response: Error("unexpected end of input", line: 1, column: 150)
+```
+- **Action :** Cette erreur indique que le JSON que votre serveur a envoyé n'est pas valide. Copiez le JSON de votre serveur et collez-le dans un validateur JSON en ligne pour trouver l'erreur de syntaxe.
 
-## 9. Conclusion et Améliorations Possibles
+#### Scénario 3 : Échec - `finish_reason` Manquant
 
-### Conclusion
-Zed est un projet d'ingénierie logicielle impressionnant, caractérisé par :
--   Une **architecture Rust robuste et modulaire** (workspace).
--   Un **framework UI propriétaire (`gpui`)** qui est au cœur de ses performances et de son expérience utilisateur.
--   Une **séparation claire des responsabilités** entre le modèle (`project`), la vue (`editor`) et le contrôleur (`workspace`).
--   Une **forte extensibilité**, avec un système d'extensions qui est lui-même une partie intégrante du projet.
+C'est le "problème de la boucle". Si vous oubliez d'envoyer le chunk final avec `finish_reason: "tool_calls"`, il n'y aura **pas d'erreur explicite** dans les logs.
 
-### Améliorations Possibles
--   **Documentation interne :** Bien que le code soit bien structuré, de nombreux crates plus petits manquent de documentation de haut niveau, ce qui peut rendre leur découverte difficile.
--   **Complexité d'entrée :** La taille du monorepo et le grand nombre de crates peuvent être intimidants pour un nouveau contributeur. Un guide de contribution plus détaillé sur "où commencer" pourrait être utile.
--   **Dépendances "forkées" :** L'utilisation de versions patchées de certaines dépendances (via `[patch.crates-io]`) peut compliquer la maintenance et la mise à jour. Il serait bon de documenter pourquoi ces forks sont nécessaires.
--   **Configuration de l'édition Rust :** L'utilisation de `edition = "2024"` est avant-gardiste et nécessite une toolchain `nightly`. Cela devrait être clairement indiqué dans le `README.md` principal pour éviter toute confusion lors de la mise en place de l'environnement de développement.
+**Ce que vous observerez :**
+- Zed restera en état de "génération" indéfiniment.
+- Les logs de Zed ne montreront aucune nouvelle activité après le dernier chunk de données reçu. Il n'y aura pas de message "stream completed" ou "stopped".
+- Votre serveur, lui, aura terminé d'envoyer les données et clos la connexion.
+
+- **Action :** Si Zed semble bloqué, la cause la plus probable est un flux SSE mal terminé. Vérifiez que votre serveur envoie bien le chunk avec `finish_reason: "tool_calls"` **puis** le message `data: [DONE]\n\n` avant de clore la connexion.
+
+---
+
+## 6. Conclusion
+
+Ce guide a démystifié l'intégration d'agents IA avec Zed. La clé du succès ne réside pas dans la modification d'un agent externe, mais dans la création d'un serveur backend qui respecte rigoureusement la spécification de l'API OpenAI, en particulier le protocole de streaming et ses signaux de terminaison. Avec ces informations, les développeurs devraient être en mesure de construire des intégrations fiables et performantes.
