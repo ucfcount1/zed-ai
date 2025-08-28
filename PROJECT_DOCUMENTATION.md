@@ -245,8 +245,88 @@ server.listen(3000, () => {
 
 (Cette section reste identique à la version précédente, expliquant les logs pour JSON malformé et `finish_reason` manquant.)
 
+### 6.4. Checklist de Validation de l'Implémentation
+
+Avant même de tester avec Zed, suivez cette checklist pour valider votre serveur :
+
+1.  **[ ] Le serveur démarre-t-il sans erreur ?**
+    - Lancez `node votre_serveur.js`. Il doit afficher le message d'écoute sur le bon port.
+
+2.  **[ ] L'endpoint de santé (`/health`) répond-il correctement ?**
+    - Exécutez `curl http://localhost:3000/health`.
+    - Vous devez recevoir une réponse `{"status":"ok"}`.
+
+3.  **[ ] L'endpoint des modèles (`/v1/models`) répond-il ?**
+    - Exécutez `curl http://localhost:3000/v1/models`.
+    - Vous devez recevoir une liste de modèles au format JSON.
+
+4.  **[ ] L'endpoint principal (`/v1/chat/completions`) répond-il en streaming ?**
+    - Exécutez `curl -N -X POST http://localhost:3000/v1/chat/completions`.
+    - Les chunks `data:` doivent apparaître un par un.
+
+5.  **[ ] La séquence de terminaison est-elle correcte ?**
+    - Dans la sortie de `curl`, vérifiez que les **trois derniers messages** sont exactement :
+      1. `data: {"id":...,"choices":[{"finish_reason":"tool_calls"}]}`
+      2. `data: [DONE]`
+      3. La connexion est fermée par le serveur.
+
+Si tous les points de cette checklist sont validés, votre serveur est prêt à être testé avec Zed.
+
+### 6.5. Guide de Vérification de l'Intégration
+
+Une fois le serveur validé, suivez ces étapes pour tester l'intégration complète :
+
+1.  **Configurez `settings.json`** dans Zed pour pointer vers votre `api_url` locale.
+2.  **Redémarrez Zed** complètement pour garantir la prise en compte des nouveaux paramètres.
+3.  **Ouvrez un projet** et créez un fichier de test (ex: `test.js`).
+4.  **Ouvrez l'assistant IA** (ex: `cmd-shift-space`).
+5.  **Donnez une instruction** qui nécessite l'utilisation de l'outil `edit_file`. Par exemple : "Écrase le contenu de `test.js` avec 'hello world'".
+6.  **Observez le comportement :**
+    - **Succès :** L'assistant doit afficher une prévisualisation de la modification, et vous devez pouvoir l'appliquer. Les logs de votre serveur Node.js doivent montrer une requête entrante.
+    - **Échec (Zed reste en attente) :** C'est le "problème de la boucle". Votre serveur ne termine pas le stream correctement. (Voir section 3).
+    - **Échec (Aucune réponse de l'assistant) :** Zed n'a probablement pas pu atteindre votre serveur. Vérifiez l'URL dans `settings.json` et assurez-vous que votre serveur est en cours d'exécution. Consultez les logs de Zed pour des erreurs de connexion.
+
+### 6.6. Configuration : Développement vs. Production
+
+-   **Développement :** L'utilisation de `localhost` et d'un port comme `3000` est parfaite. Vous pouvez utiliser des outils comme `nodemon` pour redémarrer automatiquement votre serveur lors des modifications.
+-   **Production :**
+    - Votre serveur devra être déployé sur un service d'hébergement (ex: Vercel, Render, AWS, etc.).
+    - L'`api_url` dans Zed devra pointer vers votre URL publique (ex: `https://votre-serveur-zed.com/v1`).
+    - **Sécurité :** Ne hardcodez jamais de clés d'API ou de secrets. Utilisez des variables d'environnement (`process.env`) pour les gérer, comme montré dans l'exemple de code "production-ready".
+
 ---
 
-## 7. Conclusion
+## 7. Architecture Technique Détaillée
+
+Pour les développeurs souhaitant une compréhension plus profonde, cette section décrit le flux de données interne de Zed lors d'une interaction avec un agent IA.
+
+### 7.1. Cycle de Vie Complet d'une Requête (Data Flow Textuel)
+
+1.  **Requête Utilisateur (UI)**: L'utilisateur tape un prompt dans le panneau de l'assistant de Zed et appuie sur Entrée.
+2.  **Création du `Thread`**: Le `crates/agent` crée ou met à jour un objet `Thread`. Cette structure, définie dans `crates/agent/src/thread.rs`, contient tout l'historique de la conversation (messages, `tool_calls` passés, etc.).
+3.  **Construction de la Requête**: La méthode `to_completion_request` sur le `Thread` assemble l'historique des messages et le contexte pour créer une `LanguageModelRequest`.
+4.  **Envoi de la Requête HTTP**: Cette `LanguageModelRequest` est passée au `provider` configuré (dans notre cas, `crates/language_models/src/provider/open_ai.rs`). Le provider la transforme en une requête HTTP `POST` et l'envoie à l'`api_url` que vous avez configurée.
+5.  **Réponse du Serveur (SSE)**: Votre serveur reçoit la requête et commence à envoyer des chunks SSE (`data: ...`).
+6.  **Parsing du Stream**: Le `OpenAiEventMapper` dans `open_ai.rs` reçoit ces chunks. Il parse le JSON et convertit chaque partie (`delta.content`, `delta.tool_calls`, `finish_reason`) en un événement interne `LanguageModelCompletionEvent`.
+7.  **Mise à jour du `Thread`**: Le `crates/agent` écoute ces événements.
+    - `Text` -> Le texte est ajouté au message de l'assistant dans l'UI.
+    - `ToolUse` -> Un `PendingToolUse` est créé et stocké dans l'état du `Thread`.
+8.  **Fin du Stream et Exécution des Outils**: Lorsque l'événement `StopReason::ToolUse` est reçu (déclenché par `finish_reason: "tool_calls"`), la méthode `use_pending_tools` est appelée.
+9.  **Exécution de l'Outil**: La méthode `run` de l'outil correspondant (ex: `EditFileTool::run`) est exécutée.
+10. **Stockage du Résultat**: Le résultat de l'outil (succès ou erreur) est stocké dans le `Thread`, associé à son `tool_use_id`.
+11. **Cycle de Suivi (Follow-up)**: L'agent constate que tous les outils ont terminé. Il rappelle `send_to_model`.
+12. **Construction de la Requête de Suivi**: `to_completion_request` est de nouveau appelée. Cette fois, elle inclut non seulement le `tool_use` de l'assistant, mais aussi un nouveau message de `role: user` contenant le `tool_result` (le résultat de l'outil).
+13. **Seconde Réponse du LLM**: Le LLM reçoit la confirmation de l'exécution de l'outil et son résultat. Il génère une réponse finale textuelle (ex: "J'ai modifié le fichier.").
+14. **Mise à Jour Finale de l'UI**: Cette réponse textuelle finale est streamée et affichée dans l'UI de l'assistant. Le cycle est terminé.
+
+### 7.2. Gestion de l'État et de la Session
+
+- **La Session est le `Thread`**: L'état de la conversation n'est pas géré par un `sessionId` volatile, mais est entièrement encapsulé dans la structure `Thread` (`crates/agent/src/thread.rs`).
+- **Persistance**: Ce `Thread` est sérialisé et stocké localement dans la base de données de Zed, ce qui permet de conserver l'historique des conversations entre les sessions de l'éditeur.
+- **Contexte implicite**: Chaque requête envoyée à votre serveur contient l'historique pertinent des messages (y compris les `tool_calls` et `tool_results` précédents), reconstruit à partir du `Thread`. Votre serveur n'a donc pas besoin de stocker l'état de la conversation ; il peut être "stateless" et répondre à chaque requête indépendamment.
+
+---
+
+## 8. Conclusion
 
 Ce guide a démystifié l'intégration d'agents IA avec Zed. La clé du succès ne réside pas dans la modification d'un agent externe, mais dans la création d'un serveur backend qui respecte rigoureusement la spécification de l'API OpenAI, en particulier le protocole de streaming et ses signaux de terminaison. La connaissance précise des outils disponibles, de leurs arguments et de leurs limitations est également essentielle. Avec ces informations, les développeurs devraient être en mesure de construire des intégrations fiables et performantes.
