@@ -24,6 +24,11 @@ Ce document fournit une analyse détaillée de l'architecture, de la structure e
 - [6. Tableau Récapitulatif des Modules](#6-tableau-récapitulatif-des-modules)
 - [7. Deep Dive: Opérations sur le Système de Fichiers (Sauvegarde d'un fichier)](#7-deep-dive-opérations-sur-le-système-de-fichiers-sauvegarde-dun-fichier)
 - [8. Spécification Technique: Protocole Agent-Client pour les Éditions de Fichiers par IA](#8-spécification-technique-protocole-agent-client-pour-les-éditions-de-fichiers-par-ia)
+  - [8.1. Flux d'Exécution Complet : de la Réponse du LLM à l'Édition du Fichier](#81-flux-dexécution-complet--de-la-réponse-du-llm-à-lédition-du-fichier)
+  - [8.2. Exemple Minimal Fonctionnel (MWE)](#82-exemple-minimal-fonctionnel-mwe)
+  - [8.3. Pièges Courants](#83-pièges-courants)
+  - [8.4. Où Trouver l'Outil CLI](#84-où-trouver-loutil-cli)
+  - [8.5. Comment Tester l'Outil CLI Manuellement](#85-comment-tester-loutil-cli-manuellement)
 - [9. Conclusion et Améliorations Possibles](#9-conclusion-et-améliorations-possibles)
 
 ---
@@ -330,180 +335,120 @@ Ce flux de délégation est un excellent exemple de la séparation des responsab
 
 Ce chapitre fournit une spécification technique détaillée pour permettre la construction d'un serveur LLM externe (par exemple, en Node.js) capable de communiquer avec Zed pour effectuer des modifications de fichiers.
 
-### 8.1. Schémas des Outils et Noms Valides
+### 8.1. Flux d'Exécution Complet : de la Réponse du LLM à l'Édition du Fichier
 
-Zed communique ses intentions d'édition via des "tool calls". Votre serveur doit reconnaître et utiliser les noms et schémas exacts que Zed attend.
+1.  **Votre API externe** (le faux serveur LLM) envoie une réponse de `tool_call` en streaming contenant la commande `edit_file`.
+2.  **L'outil CLI de Zed** (par exemple, `@zed-ai/ucf`, situé dans `~/.zed/agents/`) reçoit cette réponse via HTTP.
+3.  Le CLI convertit la réponse de l'API OpenAI en **protocole ACP (Agent Client Protocol)** et écrit le résultat sur sa sortie standard (`stdout`). Par exemple : `{"type":"response","body":{...}}`.
+4.  **Zed (l'application Rust)** lit le `stdout` du CLI, parse le message ACP et valide l'appel d'outil.
+5.  Zed appelle le gestionnaire interne `edit_file` situé dans `crates/assistant/src/tools/edit_file.rs`.
+6.  Le gestionnaire valide les arguments :
+    -   Vérifie que le `path` est relatif à une racine du projet.
+    -   Vérifie la validité du `mode` et la présence des champs `content` ou `old_text`/`new_text`.
+    -   Applique la modification via les couches `project` et `worktree`.
+7.  Le fichier est mis à jour sur le disque.
 
-| Champ | Exemple et Description |
-| :--- | :--- |
-| **Nom de l'Outil** | `"edit_file"` |
-| **Schéma des Arguments** | Doit correspondre à la structure de données attendue par Zed. |
-| **Champs Requis** | `path`, `mode`, `content` (ou `old_text`/`new_text`), `display_description`. |
+### 8.2. Exemple Minimal Fonctionnel (MWE)
 
-L'outil `edit_file` a trois modes principaux :
--   `"create"` : Pour les fichiers qui n'existent pas. Nécessite le champ `content`.
--   `"overwrite"` : Pour remplacer entièrement le contenu d'un fichier. Nécessite le champ `content`.
--   `"edit"` : Pour appliquer un patch. Nécessite les champs `old_text` et `new_text`.
+Pour déclencher une édition de fichier, vous pouvez utiliser le serveur Node.js minimal suivant.
 
-### 8.2. Format Correct du Chemin de Fichier
+**Étape 1 :** Lancez ce serveur Node.js.
+```javascript
+const http = require('http');
 
-Zed attend des chemins de fichiers **relatifs à la racine du projet**.
+const server = http.createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/v1/chat/completions') {
+    res.setHeader('Content-Type', 'text/event-stream');
 
--   **Règle :** Le chemin doit commencer par le nom d'un des répertoires racine du projet.
--   **Exemple :** Si un des "root directories" de Zed est `/data/projects/my-app`, pour éditer le fichier `/data/projects/my-app/src/index.js`, le chemin à fournir est `"my-app/src/index.js"`.
--   **Important :** N'utilisez **jamais** de chemins absolus dans les `tool_calls`.
+    const toolCallPayload = {
+      id: "chat-123",
+      object: "chat.completion.chunk",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_edit_1",
+                type: "function",
+                function: {
+                  name: "edit_file",
+                  arguments: JSON.stringify({
+                    path: "v1/test.js", // Assurez-vous que ce fichier existe dans votre projet
+                    mode: "overwrite",
+                    content: "console.log('Fichier mis à jour par le serveur fake !');\n",
+                    display_description: "Mise à jour du fichier de test"
+                  })
+                }
+              }
+            ]
+          },
+          finish_reason": "tool_calls"
+        }
+      ]
+    };
 
-### 8.3. Format du Streaming (SSE)
+    res.write(`data: ${JSON.stringify(toolCallPayload)}\n\n`);
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } else {
+    res.statusCode = 404;
+    res.end('Not Found');
+  }
+});
 
-La communication entre le CLI proxy de Zed et votre serveur se fait via Server-Sent Events (SSE). Le format doit être respecté à la lettre.
-
-| Règle | Raison |
-| :--- | :--- |
-| Chaque ligne doit être `data: <json>\n\n` | C'est le format SSE standard. Un double `\n` termine un événement. |
-| Pas de lignes vides entre les chunks | Cela briserait le parsing du flux SSE. |
-| La ligne finale doit être `data: [DONE]\n\n` | C'est la convention utilisée par OpenAI pour signaler la fin du flux. |
-
-Votre API ne doit **jamais** envoyer de métadonnées supplémentaires (comme des logs `console.log`) sur le `stdout`. Seules les lignes `data: ...` sont autorisées.
-
-### 8.4. Structure Exacte de l'Appel d'Outil (Tool Call)
-
-C'est le point le plus critique. Zed s'attend à ce que les `tool_calls` soient streamés de manière incrémentale.
-
-**1. Premier Chunk - Initialisation de l'appel d'outil :**
-```json
-{
-  "choices": [
-    {
-      "delta": {
-        "tool_calls": [
-          {
-            "index": 0,
-            "id": "call_abc123",
-            "type": "function",
-            "function": {
-              "name": "edit_file",
-              "arguments": "{"
-            }
-          }
-        ]
-      }
-    }
-  ]
-}
+server.listen(3000, '127.0.0.1', () => {
+  console.log('Fake OpenAI server running on http://127.0.0.1:3000');
+});
 ```
 
-**2. Chunks suivants - Streaming des arguments :**
-Les `arguments` sont une chaîne de caractères JSON. Vous pouvez la streamer en plusieurs parties.
-```json
-{
-  "choices": [
-    {
-      "delta": {
-        "tool_calls": [
-          {
-            "index": 0,
-            "function": {
-              "arguments": "\"path\":\"v1/test.js\",\"mode\":\"overwrite\","
-            }
-          }
-        ]
-      }
-    }
-  ]
-}
+**Étape 2 :** Modifiez l'outil CLI de Zed pour qu'il pointe vers votre serveur local. (Voir la section "Où Trouver l'Outil CLI").
+
+**Étape 3 :** Dans Zed, ouvrez le chat de l'assistant et demandez une modification, par exemple : "Update test.js".
+
+**Résultat :** Le fichier `v1/test.js` sera écrasé avec le nouveau contenu.
+
+### 8.3. Pièges Courants
+
+| Erreur Commune | Effet | Solution |
+| :--- | :--- | :--- |
+| Envoi de logs (`console.log`) dans le flux | Brise le parsing SSE | N'envoyez que des lignes `data: ...` sur `stdout`. |
+| Utilisation de chemins absolus | Zed rejette avec une erreur `Path not in project` | Utilisez des chemins relatifs à la racine du projet (ex: `mon_projet/src/main.js`). |
+| `display_description` manquant | L'appel d'outil est rejeté | Incluez toujours ce champ dans les arguments de l'outil. |
+| JSON invalide dans `arguments` | Erreur de parsing dans Zed | Utilisez toujours `JSON.stringify()` pour générer la chaîne des arguments. |
+| Oubli de `[DONE]` | Le flux reste ouvert, Zed attend indéfiniment | Terminez toujours le flux avec `data: [DONE]\n\n`. |
+| Oubli de patcher le CLI | Le CLI contacte la véritable API OpenAI | Modifiez le `baseURL` dans le code du CLI. |
+
+### 8.4. Où Trouver l'Outil CLI
+
+Zed télécharge les outils CLI pour les agents IA dans un dossier spécifique à votre système d'exploitation :
+
+-   **macOS :** `~/.zed/agents/`
+-   **Linux :** `~/.config/zed/agents/`
+-   **Windows :** `%APPDATA%\zed\agents\`
+
+Chaque dossier contient une application Node.js (par exemple, `@zed-ai/ucf`). Vous pouvez modifier son code (`index.js`) pour :
+-   Changer l'URL de l'API pour pointer vers votre serveur local.
+-   Ajouter des logs pour le débogage.
+-   Tester le CLI directement avec `node index.js`.
+
+### 8.5. Comment Tester l'Outil CLI Manuellement
+
+Vous pouvez simuler un appel de Zed à votre serveur en utilisant `curl` pour vous assurer que votre serveur renvoie le format attendu.
+
+```bash
+# Exemple : Tester votre serveur fake directement
+curl -X POST http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "ucf",
+    "messages": [{"role":"user","content":"Test"}],
+    "stream": true
+  }' \
+  --no-buffer
 ```
-... et ainsi de suite, jusqu'à ce que la chaîne JSON des arguments soit complète.
-
-**3. Dernier Chunk - Finalisation :**
-```json
-{
-  "choices": [
-    {
-      "delta": {},
-      "finish_reason": "tool_calls"
-    }
-  ]
-}
-```
-**Important :** La concaténation de toutes les chaînes de `arguments` doit former un JSON valide.
-
-### 8.5. Que se passe-t-il après l'appel d'outil ?
-
-Zed n'applique pas les modifications immédiatement.
-1.  Le LLM suggère un `tool_call` (`edit_file`).
-2.  Zed exécute la commande via son outil CLI interne.
-3.  L'outil CLI renvoie un résultat (par exemple, un diff) à Zed.
-4.  Zed peut envoyer une deuxième requête à votre API avec le résultat de l'outil, pour obtenir une confirmation finale de l'assistant.
-
-Pour simplement déclencher l'édition, le premier `tool_call` est suffisant.
-
-### 8.6. Gestionnaire d'Outil Interne de Zed
-
--   **Crate :** `crates/assistant/src/tools/edit_file.rs`
--   **Fonction :** La logique de gestion de l'outil `edit_file` se trouve probablement ici.
--   **Validation :** Le code Rust de Zed valide que :
-    -   Le `path` est bien relatif à une racine du projet.
-    -   Le `display_description` est présent dans les arguments.
-    -   Le `mode` est valide (`create`, `overwrite`, ou `edit`).
-    -   Les champs `content` ou `old_text`/`new_text` sont présents selon le mode.
-
-### 8.7. Débogage : Comment Voir ce qui Échoue
-
--   **Logs de Zed :** Allez dans `Help → Show Logs` dans le menu de Zed. Cherchez des erreurs liées à `assistant`, `agent`, `tool`, ou `edit_file`.
--   **Lancer Zed depuis le terminal :**
-    ```bash
-    /Applications/Zed.app/Contents/MacOS/Zed
-    ```
-    Cela vous montrera la sortie `stdout` des outils CLI de l'IA, y compris les erreurs de parsing ou de communication.
-
-### 8.8. Comportement du CLI Proxy
-
-Le maillon manquant est souvent le comportement du CLI qui fait le pont entre votre API et Zed.
--   **Localisation :** Ces outils se trouvent généralement dans `~/.zed/agents/`.
--   **Rôle :** Le CLI (`@zed-ai/ucf` par exemple) reçoit la requête de Zed, la transmet à votre API (il faut le patcher pour qu'il pointe vers `http://localhost:3000`), reçoit la réponse de votre API, et la traduit en messages ACP sur son `stdout` pour que Zed puisse la lire.
-
-### 8.9. Exemple Minimal de Réponse Fonctionnelle
-
-Voici un exemple complet du **dernier chunk** que votre API devrait envoyer pour déclencher une édition de fichier.
-
-```json
-{
-  "id": "chat-123",
-  "object": "chat.completion.chunk",
-  "choices": [
-    {
-      "index": 0,
-      "delta": {
-        "tool_calls": [
-          {
-            "index": 0,
-            "id": "call_edit_1",
-            "type": "function",
-            "function": {
-              "name": "edit_file",
-              "arguments": "{\"path\":\"v1/test.js\",\"mode\":\"overwrite\",\"content\":\"console.log('updated');\\n\",\"display_description\":\"Update test file\"}"
-            }
-          }
-        ]
-      },
-      "finish_reason": "tool_calls"
-    }
-  ]
-}
-```
-Envoyez ceci, suivi de `data: [DONE]\n\n`.
-
-### 8.10. Résumé des Informations Requises
-
-| Catégorie | Ce dont vous avez besoin |
-| :--- | :--- |
-| 🛠️ **Schéma de l'Outil** | Le schéma JSON complet pour `edit_file`. |
-| 📁 **Règles de Chemin** | Les chemins doivent être relatifs à la racine du projet. |
-| 📡 **Format de Streaming** | Format `text/event-stream` avec `data: ` et `\n\n`. |
-| 🔗 **Protocole du CLI** | Comment le CLI convertit la réponse de l'API OpenAI en protocole ACP sur `stdout`. |
-| 🧪 **Logs de Débogage** | Où Zed logue les erreurs de parsing et d'exécution des outils. |
-| 🧱 **Internes de Zed** | Le code source de `crates/assistant/src/tools/edit_file.rs`. |
-| 🔄 **Flux de Suivi** | Si Zed envoie une deuxième requête après l'exécution de l'outil. |
+La sortie attendue devrait être le flux SSE que votre serveur génère, que vous pourrez ensuite vérifier pour la conformité.
 
 ---
 
