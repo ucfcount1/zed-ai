@@ -253,6 +253,180 @@ server.listen(3000, () => console.log('Fake OpenAI server for Zed running on htt
 
 ---
 
+### 8.6. Modification Pratique du CLI
+
+Cette section fournit les étapes concrètes pour modifier l'agent CLI afin qu'il communique avec votre serveur local au lieu de l'API OpenAI officielle.
+
+#### 1. Identifier le CLI Actif et son Emplacement
+
+Zed télécharge les agents dans un répertoire spécifique. Pour trouver le bon agent à modifier (par exemple, `@zed-ai/openai` ou `@zed-ai/ucf`), vous devez d'abord lister le contenu de ce répertoire :
+
+```sh
+# Sur macOS
+ls ~/.zed/agents/
+
+# Sur Linux
+ls ~/.config/zed/agents/
+
+# Sur Windows (dans PowerShell)
+Get-ChildItem $env:APPDATA\zed\agents
+```
+
+Naviguez dans le dossier de l'agent que vous souhaitez utiliser (par exemple, `~/.zed/agents/@zed-ai/openai/`). Le fichier à modifier est `index.js`.
+
+#### 2. Modifier le Fichier `index.js`
+
+Ouvrez `index.js` et localisez la ligne où l'objet `OpenAI` est instancié. Vous devez changer le `baseURL` pour pointer vers votre serveur.
+
+**Code typique AVANT modification :**
+```javascript
+// Fichier: ~/.zed/agents/@zed-ai/openai/index.js
+
+// ... (autre code)
+
+const openai = new OpenAI({
+  baseURL: "https://api.openai.com/v1",  // <-- LIGNE À CHANGER
+  apiKey: process.env.OPENAI_API_KEY,
+  // ... autres options
+});
+
+// ... (autre code)
+```
+
+**Code APRÈS modification :**
+```javascript
+// Fichier: ~/.zed/agents/@zed-ai/openai/index.js
+
+// ... (autre code)
+
+const openai = new OpenAI({
+  baseURL: "http://localhost:3000/v1",   // <-- VOTRE SERVEUR LOCAL
+  apiKey: "fake-api-key", // La clé peut être factice si votre serveur ne la valide pas
+  // ... autres options
+});
+
+// ... (autre code)
+```
+**Important :** Le chemin `/v1` à la fin de l'URL est souvent nécessaire car le client OpenAI l'ajoute par défaut. Assurez-vous que votre serveur local gère cette route (par exemple, `POST /v1/chat/completions`).
+
+### 8.7. Ce que Fait le CLI en Interne : Traduction OpenAI → ACP
+
+Le rôle le plus important de l'agent CLI est de servir de **traducteur**. Il reçoit une réponse formatée selon la spécification OpenAI (avec des `tool_calls`) de votre serveur et la convertit en une série de messages ACP que Zed peut comprendre.
+
+Voici un exemple concret de ce flux de traduction pour un seul `tool_call` :
+
+#### Étape 1 : Le serveur répond au format OpenAI
+
+Votre serveur (par exemple, `http://localhost:3000`) renvoie un "chunk" Server-Sent Event (SSE) contenant un `tool_call`.
+
+**Réponse de votre serveur (format OpenAI) :**
+```json
+{
+  "id": "chatcmpl-...",
+  "object": "chat.completion.chunk",
+  "created": 1677652288,
+  "model": "gpt-4",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "tool_calls": [
+          {
+            "index": 0,
+            "id": "call_abc123",
+            "type": "function",
+            "function": {
+              "name": "edit_file",
+              "arguments": "{\n  \"display_description\": \"Refactor the main function\",\n  \"path\": \"src/main.js\",\n  \"mode\": \"edit\",\n  \"old_text\": \"console.log(\\\"hello world\\\");\",\n  \"new_text\": \"console.log(\\\"Hello, World!\\\");\"\n}"
+            }
+          }
+        ]
+      },
+      "finish_reason": null
+    }
+  ]
+}
+```
+
+#### Étape 2 : Le CLI traduit en message ACP
+
+L'agent CLI (`index.js`) reçoit ce JSON. Il l'analyse, extrait les informations du `tool_call` et construit un message ACP `session/update`.
+
+**Message écrit par le CLI sur `stdout` (format ACP) :**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "session/update",
+  "params": {
+    "sessionId": "sess_xyz789",
+    "update": {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "call_abc123",
+      "title": "Refactor the main function",
+      "kind": "edit",
+      "status": "pending",
+      "content": [
+        {
+          "type": "diff",
+          "path": "src/main.js",
+          "oldText": "console.log(\"hello world\");",
+          "newText": "console.log(\"Hello, World!\");"
+        }
+      ]
+    }
+  }
+}
+```
+Ce message est ensuite envoyé à Zed, qui l'interprète pour afficher l'aperçu de la modification dans l'interface utilisateur.
+
+### 8.8. Rechargement de l'Agent et Débogage
+
+Modifier l'agent est une chose, mais s'assurer que Zed utilise bien votre version modifiée et comprendre ce qui se passe en cas de problème est tout aussi crucial.
+
+#### 1. Forcer le Rechargement de l'Agent
+
+Après avoir modifié le fichier `index.js` d'un agent, Zed ne prendra pas automatiquement en compte les changements. L'agent est un processus externe qui est lancé au besoin.
+
+**La méthode la plus fiable pour forcer un rechargement est de redémarrer complètement Zed.**
+
+Une autre approche possible consiste à changer de modèle d'IA dans les paramètres de Zed, puis à revenir au modèle précédent. Cela peut parfois forcer Zed à relancer le processus de l'agent.
+
+#### 2. Consulter les Logs de Zed
+
+Les logs de Zed sont la source de vérité numéro un pour le débogage.
+-   **Ouvrir les logs :** Allez dans le menu `Help > Show Logs`. Cela ouvrira le répertoire des logs de Zed.
+-   **Quel fichier chercher :** Le fichier `zed.log` contient les informations les plus récentes.
+-   **Quoi chercher dans les logs :**
+    -   Erreurs de parsing JSON : `error parsing json-rpc message` indique souvent un problème avec le format ACP que votre agent envoie.
+    -   Erreurs de `spawn`: Cherchez des lignes contenant `failed to spawn` pour voir si Zed n'arrive pas à lancer le processus de l'agent.
+    -   Messages de l'agent : `stdout` et `stderr` du processus de l'agent y sont souvent redirigés.
+
+#### 3. Erreurs Courantes et Solutions
+
+-   **Problème :** Le fichier est vidé (overwrite avec du contenu vide).
+    -   **Cause probable :** Le `tool_call` a été reçu, mais son contenu était mal formé ou vide. Votre serveur envoie probablement un `content: ""` ou une structure invalide.
+    -   **Solution :** Vérifiez la logique de votre serveur pour vous assurer que le champ `content` (ou `old_text`/`new_text`) est correctement rempli.
+-   **Problème :** Rien ne se passe dans Zed.
+    -   **Cause probable :** L'agent n'a pas réussi à contacter votre serveur local, ou votre serveur n'a pas renvoyé une réponse SSE valide.
+    -   **Solution :** Vérifiez que votre serveur est en cours d'exécution et accessible. Testez le `baseURL` avec `curl` depuis votre terminal. Assurez-vous que votre serveur renvoie bien `data: [DONE]` à la fin du stream.
+-   **Problème :** Une erreur "Permission Denied" apparaît dans l'UI de Zed.
+    -   **Cause probable :** Vous essayez de modifier un fichier en dehors de la racine du projet ou dans un répertoire protégé.
+    -   **Solution :** Vérifiez le `path` envoyé dans votre `tool_call`.
+
+#### 4. Tester l'Agent en Isolation
+
+Vous pouvez tester le script `index.js` de l'agent directement depuis votre terminal, sans passer par Zed. Cela vous permet de voir exactement ce qu'il envoie sur `stdout`.
+
+```sh
+# 1. Naviguez vers le répertoire de l'agent
+cd ~/.zed/agents/@zed-ai/openai/
+
+# 2. Lancez le script avec Node.js
+# Assurez-vous que votre serveur local est déjà en cours d'exécution !
+node index.js
+```
+Le script va démarrer, attendre une entrée sur `stdin` (simulant Zed), contacter votre serveur, et imprimer le message ACP traduit sur la console. Cela vous permet de valider la logique de traduction sans l'interférence de Zed.
+
 ## 9. Conclusion et Améliorations Possibles
 
 ### Conclusion
