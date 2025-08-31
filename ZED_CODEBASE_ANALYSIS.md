@@ -256,3 +256,44 @@ This section provides a detailed, file-by-file analysis of the `agent_servers` c
     -   **`src/settings.rs`**:
         -   **Purpose**: Defines the data structures for configuring all agent servers in `settings.json`.
         -   **`AllAgentServersSettings` Struct**: The top-level settings object. It has dedicated fields for `claude` and `gemini` and uses `#[serde(flatten)]` on a `HashMap` to allow users to define an arbitrary number of custom agents with a clean JSON structure.
+---
+### Crate-Level Analysis: `agent_settings`
+
+This section provides a detailed, file-by-file analysis of the `agent_settings` crate.
+
+-   **`crates/agent_settings`**
+    -   **Description**: A small but critical crate that defines all user-configurable settings for Zed's AI agent features. It acts as the single source of truth for agent configuration, covering everything from UI behavior and model selection to the agent's core capabilities, which are controlled via "Agent Profiles."
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**:
+            -   `settings`, `schemars`, `serde`: Confirms its role is to define serializable setting structures for Zed's configuration system.
+            -   `language_model`: Indicates the settings are used to configure language models.
+    -   **`src/agent_settings.rs`**:
+        -   **Purpose**: Defines the main `AgentSettings` struct, which consolidates all agent-related options.
+        -   **`AgentSettings` vs. `AgentSettingsContent`**: It uses a standard Zed pattern where `AgentSettingsContent` (with `Option<T>` fields) is deserialized from JSON, and then merged into the `AgentSettings` struct which holds the final, concrete values with defaults applied.
+        -   **Key Settings**: It defines a wide range of settings, including UI preferences (`dock`), model selection for different features (`default_model`, `inline_assistant_model`), and behavioral flags (`always_allow_tool_actions`).
+    -   **`src/agent_profile.rs`**:
+        -   **Purpose**: Defines the data structures for "Agent Profiles."
+        -   **`AgentProfileSettings` Struct**: The core of a profile. It contains a `tools` map (`IndexMap<Arc<str>, bool>`) that explicitly enables or disables built-in tools by name. It also has settings for controlling tools provided by extensions (`ContextServer`s), providing granular control over the agent's capabilities.
+---
+### Crate-Level Analysis: `agent_ui`
+
+This section provides a detailed, file-by-file analysis of the `agent_ui` crate.
+
+-   **`crates/agent_ui`**
+    -   **Description**: This is a high-level integration crate that builds the entire user interface for all of Zed's AI agent features. It depends on all other agent-related crates to translate their data and logic into a cohesive, interactive UI using the `gpui` framework.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**: Its extensive dependency list, including `gpui`, `ui`, `agent`, `agent2`, `agent_settings`, `agent_servers`, `editor`, and `workspace`, confirms its role as a central UI hub.
+    -   **`src/agent_ui.rs`**:
+        -   **Purpose**: The main library entry point. It defines a vast number of `gpui::Action`s for all agent-related commands, initializes all UI components and their dependencies, and sets up observers to react to settings changes.
+        -   **`ExternalAgent` Enum**: Contains a factory `server()` method that the UI uses to select and instantiate the correct agent backend (e.g., native, Claude, custom) when a user starts a conversation.
+    -   **`src/agent_panel.rs`**:
+        -   **Purpose**: Defines the `AgentPanel`, the main `gpui` component and view controller for the agent side panel.
+        -   **`ActiveView` Enum**: It acts as a state machine, using this enum to switch between different sub-views like the conversation thread (`AcpThreadView`), history, or settings. Its `render` method is a dispatcher that decides which sub-view to render.
+    -   **`src/acp/thread_view.rs`**:
+        -   **Purpose**: Defines `AcpThreadView`, the component for rendering conversations with modern, ACP-based agents (like `agent2` and Claude).
+        -   **Logic**: It's a stateful component that manages the connection to the agent, listens for real-time events from the `AcpThread` to update the display, and renders different entry types (user messages, assistant responses, tool calls) with specialized views, creating the rich, interactive chat experience.
+    -   **`src/agent_configuration/manage_profiles_modal.rs`**:
+        -   **Purpose**: Defines the `ManageProfilesModal` for viewing, creating, and configuring agent profiles.
+        -   **Logic**: It's a state machine that presents different UI screens for listing profiles, creating new ones, and embedding a `ToolPicker` component to let users enable or disable specific tools for a given profile. It reads from and writes to the `AgentSettings`.
