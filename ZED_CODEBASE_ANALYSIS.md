@@ -73,3 +73,27 @@ The Zed codebase is a well-architected, modern software project that showcases a
 *   **Declarative Configuration**: The use of JSON for settings, keymaps, and themes makes the editor highly customizable for users.
 
 Overall, Zed is an impressive project with a solid and scalable architecture. This concludes the analysis.
+
+---
+### Crate-Level Analysis: `action_log`
+
+This section provides a detailed, file-by-file analysis of the `action_log` crate.
+
+-   **`crates/action_log`**
+    -   **Description**: This crate provides a system for logging user and agent actions performed on buffers. This "action log" is more sophisticated than a simple history, as it tracks the *author* of changes (user vs. agent) and their review state (e.g., unreviewed, accepted, rejected). This is a foundational component for enabling collaborative AI features where the agent modifies code.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**:
+            -   `project`, `language`, `buffer_diff`: Shows that the crate's primary function is to track changes to code buffers within a project.
+            -   `clock`: Indicates that logged actions are timestamped.
+            -   `gpui`: It is a `gpui` entity, meaning it's integrated into the core application state.
+    -   **`src/action_log.rs`**:
+        -   **Purpose**: Contains the core logic for the action logging system. It defines the data structures for tracking buffer states and the history of edits.
+        -   **Key Structs**:
+            -   `ActionLog`: The main entity that manages a collection of tracked buffers. It serves as the primary interface for logging actions.
+            -   `TrackedBuffer`: Holds the detailed state for a single tracked buffer. This includes the `diff_base` (the version of the text against which changes are compared), `unreviewed_edits` (a patch of agent changes not yet approved by the user), and the `status` of the file (`Created`, `Modified`, `Deleted`).
+        -   **Key Functions**:
+            -   `new(project: Entity<Project>)`: The constructor for the `ActionLog`. **Input**: A `Project` entity. **Output**: A new `ActionLog` instance.
+            -   `buffer_read(...)`, `buffer_created(...)`, `buffer_edited(...)`: These are the API methods called by the agent system to notify the log of interactions with a buffer, which initiates or updates the tracking.
+            -   `unnotified_user_edits(...)`: Calculates a unified diff of all changes a *user* has made to tracked buffers since the AI was last notified. This is critical for keeping the AI's context up-to-date. **Output**: `Option<String>` containing the unified diff.
+            -   `keep_edits_in_range(...)`, `reject_edits_in_ranges(...)`: These methods allow the user to accept or reject specific agent-suggested changes by updating the internal diff state.
