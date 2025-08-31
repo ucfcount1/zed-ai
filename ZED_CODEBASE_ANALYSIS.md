@@ -331,3 +331,53 @@ This section provides a detailed, file-by-file analysis of the `anthropic` crate
         -   **Data Structures**: The majority of the file defines Rust structs (`Request`, `Response`, `Message`, `Event`) that precisely mirror the JSON objects in the Anthropic API, using `serde` for conversion. The `Model` enum centralizes all known Anthropic model IDs and their properties.
         -   **API Functions**: It provides two main `async` functions: `complete` for making a single request and waiting for the full response, and `stream_completion` for initiating a streaming request and returning a `BoxStream` of events, which enables real-time "typing" effects in the UI.
         -   **Error Handling**: It defines a comprehensive `AnthropicError` enum to provide structured error handling for all possible failure modes, from network issues to specific API errors.
+---
+### Crate-Level Analysis: `askpass`
+
+This section provides a detailed, file-by-file analysis of the `askpass` crate.
+
+-   **`crates/askpass`**
+    -   **Description**: A small utility crate that implements the `askpass` protocol. This is a standard mechanism used by command-line tools like `git` and `ssh` to request credentials (like a password or passphrase) from a user via a graphical interface instead of the terminal.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**: `net`, `tempfile`. These dependencies reveal the implementation strategy: it uses a Unix domain socket for inter-process communication and a temporary script file.
+    -   **`src/askpass.rs`**:
+        -   **Purpose**: Contains the complete implementation of the `askpass` session logic.
+        -   **`AskPassSession` Struct**: This is the main entry point. Its `new` method creates a Unix domain socket and spawns a background task to listen on it. It also generates a temporary shell script (`askpass.sh` or `askpass.ps1`).
+        -   **The `askpass` Script**: This generated script is what external programs (like `git`) are configured to execute. The script simply runs the main `zed` executable with a special `--askpass` flag, pointing it to the socket path.
+        -   **`main` function (askpass mode)**: A special entry point for the `zed --askpass` command. This lightweight process connects to the main Zed application's socket, forwards the prompt it receives from `git`/`ssh`, waits for the user's input to be sent back over the socket, and then prints it to standard output for the original tool to read.
+---
+### Crate-Level Analysis: `assistant_context`
+
+This section provides a detailed, file-by-file analysis of the `assistant_context` crate.
+
+-   **`crates/assistant_context`**
+    -   **Description**: This crate provides the core data model and management layer for the AI assistant's "context." It defines what constitutes a "text thread"—a rich document that can contain not just text but also structured items like file paths, symbols, and slash commands.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**: `project`, `workspace`, `language`, `assistant_slash_command`. This shows that context is deeply tied to the editor's core data structures and that slash commands are a primary way of manipulating this context.
+    -   **`src/assistant_context.rs`**:
+        -   **Purpose**: Defines the `AssistantContext` struct, which represents a single context document.
+        -   **`AssistantContext` Struct**: This struct is built around a `gpui::Buffer`, meaning the entire context is stored in a standard Zed text buffer. It overlays semantic meaning on top of this buffer using `message_anchors` and `messages_metadata` to track the conversation structure. It is responsible for parsing slash commands and generating the final prompt sent to the LLM.
+        -   **Key Functions**: `assist` (sends the context to the LLM and streams the response back into the buffer), `to_completion_request` (converts the buffer's content into the format expected by the LLM), and `serialize`/`deserialize` (for persistence).
+    -   **`src/context_store.rs`**:
+        -   **Purpose**: Defines the `ContextStore`, which manages the lifecycle of all `AssistantContext` instances within a project.
+        -   **Logic**: It handles the creation of new contexts, loading/saving them from/to disk, and synchronizing them in collaborative sessions. It also integrates with the `ContextServerStore` to discover and register slash commands from extensions.
+---
+### Crate-Level Analysis: `assistant_slash_command`
+
+This section provides a detailed, file-by-file analysis of the `assistant_slash_command` crate.
+
+-   **`crates/assistant_slash_command`**
+    -   **Description**: This crate provides the entire framework for defining, managing, and using slash commands within the AI assistant. It creates a powerful and extensible system for adding new capabilities to the agent.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**: `async-trait`, `extension`, `workspace`. This shows that slash commands are defined by an `async` trait and can be provided by extensions.
+    -   **`src/assistant_slash_command.rs`**:
+        -   **Purpose**: Defines the core `SlashCommand` trait and the data structures for its inputs and outputs.
+        -   **`SlashCommand` Trait**: The central abstraction. It requires methods for UI metadata (`name`, `description`), dynamic argument completion (`complete_argument`), and execution (`run`). The `run` method returns a stream of `SlashCommandEvent`s, allowing for rich, structured output.
+    -   **`src/slash_command_registry.rs`**:
+        -   **Purpose**: Defines the `SlashCommandRegistry`, a global, application-wide singleton for storing all built-in, statically available slash commands. It uses the `gpui::Global` pattern for easy access from anywhere in the application.
+    -   **`src/slash_command_working_set.rs`**:
+        -   **Purpose**: Defines the `SlashCommandWorkingSet`, a dynamic, instance-specific collection of commands that augments the global registry.
+        -   **Logic**: It implements a two-tiered lookup system, first checking its own set of commands (primarily from extensions) before falling back to the global registry. This allows for commands to be added and removed at runtime as extensions are enabled or disabled.
