@@ -97,3 +97,24 @@ This section provides a detailed, file-by-file analysis of the `action_log` crat
             -   `buffer_read(...)`, `buffer_created(...)`, `buffer_edited(...)`: These are the API methods called by the agent system to notify the log of interactions with a buffer, which initiates or updates the tracking.
             -   `unnotified_user_edits(...)`: Calculates a unified diff of all changes a *user* has made to tracked buffers since the AI was last notified. This is critical for keeping the AI's context up-to-date. **Output**: `Option<String>` containing the unified diff.
             -   `keep_edits_in_range(...)`, `reject_edits_in_ranges(...)`: These methods allow the user to accept or reject specific agent-suggested changes by updating the internal diff state.
+---
+### Crate-Level Analysis: `activity_indicator`
+
+This section provides a detailed, file-by-file analysis of the `activity_indicator` crate.
+
+-   **`crates/activity_indicator`**
+    -   **Description**: This crate provides a reusable UI component, likely a spinner or progress message, that is displayed in the Zed status bar. It gives the user visual feedback about long-running background tasks, such as language server indexing, application auto-updates, or Git operations.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**:
+            -   `gpui`, `ui`: Confirms this is a UI component built with Zed's `gpui` framework.
+            -   `auto_update`, `extension_host`, `project`: Shows that the indicator listens to events from various background systems to know when to display status messages.
+    -   **`src/activity_indicator.rs`**:
+        -   **Purpose**: Contains the complete implementation of the activity indicator UI component.
+        -   **Key Structs**:
+            -   `ActivityIndicator`: The main UI component, which is a `StatusItemView` designed to be rendered in the status bar. It aggregates status information from multiple sources.
+            -   `ServerStatus`: A simple struct to hold the name and current status of a given language server.
+        -   **Key Functions**:
+            -   `new(...)`: The constructor for the `ActivityIndicator`. **Logic**: It sets up subscriptions to a wide variety of event sources across the application, including the `LanguageRegistry`, `LspStore`, `GitStore`, and `AutoUpdater`.
+            -   `render(...)`: The main `gpui` render function that determines what to display. **Logic**: It implements a priority system to decide which status message is the most important to show at any given time. For example, a critical error from a language server will be shown over a simple "checking for updates" message.
+            -   `content_to_render(...)`: A helper function called by `render` that contains the priority logic for selecting the most important status message to display from all available sources. **Output**: An `Option<Content>`, where `Content` is a struct containing the message, icon, and any associated click handler.
