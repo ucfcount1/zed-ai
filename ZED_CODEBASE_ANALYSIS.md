@@ -173,3 +173,51 @@ This section provides a detailed, file-by-file analysis of the `agent` crate.
         -   **Purpose**: Defines a generic `Tool` implementation that acts as a proxy for tools provided by an external "context server" (i.e., a third-party extension).
         -   **`ContextServerTool` Struct**: A wrapper that implements the `Tool` trait but delegates the actual execution to an external process via RPC.
         -   **`run` Function**: The core logic that sends a `CallTool` request to the appropriate context server and returns its result.
+---
+### Crate-Level Analysis: `agent2`
+
+This section provides a detailed, file-by-file analysis of the `agent2` crate.
+
+-   **`crates/agent2`**
+    -   **Description**: This crate represents the next-generation, in-process AI agent for Zed. It is a complete redesign of the original `agent` crate, with a strong focus on modularity, structured tool definitions, and highly interactive, real-time communication with the UI. It replaces the complex, monolithic `Thread` object with a more distributed and event-driven architecture. The core design revolves around the `acp_thread` (Agent Client Protocol Thread) for communication and a new `AgentTool` trait for defining capabilities.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**:
+            -   `agent_client_protocol` (`acp`): This is a critical dependency, defining the standardized protocol for communication between the agent and the client UI.
+            -   `language_model`: For direct interaction with LLMs.
+            -   `assistant_tool`: Provides the `outline` functionality, showing some reuse from the older agent system.
+            -   `project`, `workspace`, `editor`: Has deep access to the user's workspace state to perform actions.
+            -   `sqlez`: Used for database interactions, specifically for conversation history.
+            -   `schemars`, `serde_json`: Used heavily in the new tool system to generate JSON schemas for tool inputs, which are then provided to the LLM.
+    -   **`src/agent2.rs`**:
+        -   **Purpose**: The main library entry point for the `agent2` crate. It primarily re-exports the key public types from its various modules, such as `NativeAgent`, `NativeAgentConnection`, `HistoryStore`, and `Templates`, to make them accessible to other parts of the application.
+    -   **`src/agent.rs`**:
+        -   **Purpose**: Contains the definition of `NativeAgent`, the central orchestrator for the new agent. This is where the main conversational loop and tool-dispatching logic reside.
+        -   **`NativeAgent` Struct**: The core state machine for the agent. It holds references to the project, history store, tool definitions, and the active language model client.
+        -   **Key Functions**:
+            -   `new(...)`: The async constructor that initializes the agent and its tools.
+            -   `query(...)`: The main entry point for processing a user's prompt. It constructs the request, sends it to the language model, and then streams the response. It handles both text generation and the new, structured `tool_calls`.
+            -   `dispatch_tool_call(...)`: A crucial function that takes a `tool_call` from the LLM, finds the corresponding `AgentTool` implementation, deserializes the input, and executes the tool's `run` method.
+    -   **`src/db.rs`**:
+        -   **Purpose**: Defines the database schema for storing conversation history using the `sqlez` library.
+        -   **`Db` Struct**: A wrapper around a `sqlez::Connection` that provides high-level methods for database operations.
+        -   **Key Functions**: `save_thread`, `load_thread`, `load_all_threads`. These functions handle the serialization of conversation state to and from the SQLite database.
+    -   **`src/history_store.rs`**:
+        -   **Purpose**: Provides the `HistoryStore` entity, which acts as a cache and manager for conversation history. It bridges the gap between the in-memory representation of conversations (`thread.rs`) and the database persistence layer (`db.rs`).
+    -   **`src/thread.rs`**:
+        -   **Purpose**: Defines the `Thread` struct, which represents a single, live conversation. Unlike the old agent, this `Thread` is more focused on the sequence of messages and tool interactions rather than being a monolithic state object.
+        -   **`Thread` Struct**: Holds a `Vec<Message>`, where `Message` is an enum that can be from the user, the assistant, or a tool result.
+        -   **`ToolCall` and `ToolResult` Structs**: These are structured representations of tool interactions, making the conversation history much more explicit and machine-readable compared to the previous agent's XML-based approach.
+    -   **`src/tools.rs`**:
+        -   **Purpose**: Acts as a facade and registry for all the tools available to the `NativeAgent`.
+        -   **`Tools` Struct**: Holds an `Arc` for each available tool.
+        -   **`new(...)` Function**: The constructor that instantiates every single `AgentTool` implementation (e.g., `ReadFileTool`, `TerminalTool`) and stores them. This is where the agent's full capability set is defined.
+        -   **`dispatch(...)` Function**: The central tool dispatch logic. It takes a tool name and its input as raw JSON, looks up the correct tool implementation, and calls its `run` method.
+    -   **`src/tools/` (Directory)**:
+        -   **Purpose**: Contains the modular, individual implementations of each `AgentTool`. This is a major architectural improvement.
+        -   **`AgentTool` Trait**: Each tool implements this trait, which defines a standard interface with methods like `name()`, `kind()`, `run()`, and an associated `Input` type with a `JsonSchema`.
+        -   **`read_file_tool.rs`**: An implementation of the `read_file` tool. It handles reading files (including partial reads with line ranges), generating outlines for large files, and checking security settings (`file_scan_exclusions`, `private_files`).
+        -   **`terminal_tool.rs`**: An implementation of the `terminal` tool. It executes shell commands, requires user authorization for security, and ensures commands are run within the context of a project worktree.
+    -   **`src/native_agent_server.rs`**:
+        -   **Purpose**: Implements the `agent_servers::AgentServer` trait for the `NativeAgent`. This is the glue code that allows the main Zed application to discover, create, and communicate with the `agent2` implementation.
+        -   **`connect(...)` Function**: The factory method that gets called by the application to start an agent session. It creates the `NativeAgent` instance and wraps it in a `NativeAgentConnection`, which adapts it to the application's generic agent communication protocol (`acp_thread::AgentConnection`).
