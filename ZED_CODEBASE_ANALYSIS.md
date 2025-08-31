@@ -221,3 +221,38 @@ This section provides a detailed, file-by-file analysis of the `agent2` crate.
     -   **`src/native_agent_server.rs`**:
         -   **Purpose**: Implements the `agent_servers::AgentServer` trait for the `NativeAgent`. This is the glue code that allows the main Zed application to discover, create, and communicate with the `agent2` implementation.
         -   **`connect(...)` Function**: The factory method that gets called by the application to start an agent session. It creates the `NativeAgent` instance and wraps it in a `NativeAgentConnection`, which adapts it to the application's generic agent communication protocol (`acp_thread::AgentConnection`).
+---
+### Crate-Level Analysis: `agent_servers`
+
+This section provides a detailed, file-by-file analysis of the `agent_servers` crate.
+
+-   **`crates/agent_servers`**
+    -   **Description**: This crate provides a pluggable framework for managing and connecting to different AI agent backends. It defines a common interface (`AgentServer` trait) that abstracts away the details of how an agent is run and communicated with. This allows Zed to seamlessly support built-in agents (like `agent2`), third-party CLI tools (like Claude), and custom user-defined agents.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**:
+            -   `acp_thread`, `agent-client-protocol`: Shows its deep integration with the Agent Client Protocol for communication.
+            -   `context_server`: Indicates it can interact with the extension system's tool-providing servers.
+            -   `reqwest_client`: Optional dependency for making HTTP requests, likely for API-based agents.
+    -   **`src/agent_servers.rs`**:
+        -   **Purpose**: The main library entry point. It defines the central `AgentServer` trait and provides helper utilities for managing external agent processes.
+        -   **`AgentServer` Trait**: The core abstraction. It defines the contract for any agent provider, requiring methods for UI metadata (`name`, `logo`) and, most importantly, a `connect` method that returns a live `AgentConnection`.
+        -   **`AgentServerCommand` Struct**: A helper for defining and finding executables for command-line based agents, with a robust resolution strategy (settings -> PATH -> fallback).
+    -   **`src/claude.rs`**:
+        -   **Purpose**: A concrete `AgentServer` implementation for the external `@anthropic-ai/claude-code` CLI tool.
+        -   **Logic**: It demonstrates the full lifecycle: spawning the `claude` process, communicating with it over `stdio` using a streaming JSON protocol, and translating its custom protocol into the standard `AcpThread` events that the Zed UI understands.
+    -   **`src/claude/tools.rs`**:
+        -   **Purpose**: Defines the mapping from the Claude agent's specific tool-use format into Zed's internal, standardized `acp::ToolCall` representation. It acts as a translation layer.
+    -   **`src/claude/mcp_server.rs`**:
+        -   **Purpose**: Implements the local proxy server that securely exposes Zed's functionality to the external Claude agent process. This is the key to the entire integration.
+        -   **`ClaudeZedMcpServer` Struct**: Wraps a generic `context_server::listener::McpServer`, showing that this functionality is built on a reusable framework.
+        -   **Key Functions**:
+            -   `new(...)`: The constructor. It creates the server and, most importantly, registers the tool handlers (`PermissionTool`, `ReadTool`, `EditTool`, `WriteTool`) that contain the actual logic for performing actions.
+            -   `server_config()`: Constructs the configuration for the Claude CLI. It tells the CLI how to connect back to this server: by spawning the main Zed executable with special arguments (`--nc <socket_path>`) to make a tool call. This isolates tool execution in a separate process.
+            -   `handle_initialize()`: A standard LSP-style handler that advertises the server's `ToolsCapabilities` to the client.
+    -   **`src/custom.rs`**:
+        -   **Purpose**: A generic `AgentServer` implementation for user-defined agents.
+        -   **Logic**: It's a lightweight wrapper that takes a name and a command from user settings and uses a generic helper function (`crate::acp::connect`) to handle the process spawning and communication. This makes the system highly extensible.
+    -   **`src/settings.rs`**:
+        -   **Purpose**: Defines the data structures for configuring all agent servers in `settings.json`.
+        -   **`AllAgentServersSettings` Struct**: The top-level settings object. It has dedicated fields for `claude` and `gemini` and uses `#[serde(flatten)]` on a `HashMap` to allow users to define an arbitrary number of custom agents with a clean JSON structure.
