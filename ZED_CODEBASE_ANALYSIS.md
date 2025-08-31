@@ -297,3 +297,37 @@ This section provides a detailed, file-by-file analysis of the `agent_ui` crate.
     -   **`src/agent_configuration/manage_profiles_modal.rs`**:
         -   **Purpose**: Defines the `ManageProfilesModal` for viewing, creating, and configuring agent profiles.
         -   **Logic**: It's a state machine that presents different UI screens for listing profiles, creating new ones, and embedding a `ToolPicker` component to let users enable or disable specific tools for a given profile. It reads from and writes to the `AgentSettings`.
+---
+### Crate-Level Analysis: `ai_onboarding`
+
+This section provides a detailed, file-by-file analysis of the `ai_onboarding` crate.
+
+-   **`crates/ai_onboarding`**
+    -   **Description**: A dedicated UI crate responsible for all user-facing onboarding, upsell, and plan-related information for Zed's AI features. It builds and displays different views to the user based on their authentication status and subscription plan.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**: `gpui`, `ui`, `client`, `cloud_llm_client`. This confirms its role as a UI crate that is aware of the user's account status.
+    -   **`src/ai_onboarding.rs`**:
+        -   **Purpose**: Defines the main `ZedAiOnboarding` component, which acts as a state machine.
+        -   **Logic**: It checks the user's sign-in status and subscription plan (`Free`, `Trial`, `Pro`) and calls a specific `render_*` method to display the appropriate UI, such as a prompt to sign in, an offer to start a trial, or a summary of Pro features.
+    -   **`src/agent_panel_onboarding_content.rs`**:
+        -   **Purpose**: Defines the `AgentPanelOnboarding` component, which is the specific UI that gets embedded into the main agent panel.
+        -   **Logic**: It composes the main `ZedAiOnboarding` component with other elements, such as a prompt for the user to add their own third-party API keys if they don't have a Zed Pro subscription. It subscribes to the `LanguageModelRegistry` to dynamically update when the user configures new providers.
+    -   **`src/plan_definitions.rs`**:
+        -   **Purpose**: A simple, stateless component that centralizes the marketing copy for the different AI plans.
+        -   **Logic**: It contains methods like `free_plan()` and `pro_trial()` that return `gpui` `List` elements with hardcoded bullet points describing the features of each plan.
+---
+### Crate-Level Analysis: `anthropic`
+
+This section provides a detailed, file-by-file analysis of the `anthropic` crate.
+
+-   **`crates/anthropic`**
+    -   **Description**: A dedicated, low-level, and self-contained client for the Anthropic (Claude) Messages API. Its sole responsibility is to provide a type-safe Rust interface for making requests to the Anthropic backend, abstracting away the details of HTTP and JSON.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**: `http_client`, `serde`, `serde_json`. This confirms its role as an HTTP client that serializes/deserializes JSON data.
+    -   **`src/anthropic.rs`**:
+        -   **Purpose**: Contains the complete implementation of the API client.
+        -   **Data Structures**: The majority of the file defines Rust structs (`Request`, `Response`, `Message`, `Event`) that precisely mirror the JSON objects in the Anthropic API, using `serde` for conversion. The `Model` enum centralizes all known Anthropic model IDs and their properties.
+        -   **API Functions**: It provides two main `async` functions: `complete` for making a single request and waiting for the full response, and `stream_completion` for initiating a streaming request and returning a `BoxStream` of events, which enables real-time "typing" effects in the UI.
+        -   **Error Handling**: It defines a comprehensive `AnthropicError` enum to provide structured error handling for all possible failure modes, from network issues to specific API errors.
