@@ -381,3 +381,40 @@ This section provides a detailed, file-by-file analysis of the `assistant_slash_
     -   **`src/slash_command_working_set.rs`**:
         -   **Purpose**: Defines the `SlashCommandWorkingSet`, a dynamic, instance-specific collection of commands that augments the global registry.
         -   **Logic**: It implements a two-tiered lookup system, first checking its own set of commands (primarily from extensions) before falling back to the global registry. This allows for commands to be added and removed at runtime as extensions are enabled or disabled.
+---
+### Crate-Level Analysis: `assistant_tool`
+
+This section provides a detailed, file-by-file analysis of the `assistant_tool` crate.
+
+-   **`crates/assistant_tool`**
+    -   **Description**: This crate provides the framework for the original agent's tool-use capabilities. It defines what a "tool" is, how its inputs are structured, and how tools are registered and managed. This is distinct from the newer `agent2` tool framework.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**: `language_model`, `project`, `serde_json`, `action_log`. This shows that tools are designed to be used by an LLM, operate on the project, use JSON for data, and log their actions for review.
+    -   **`src/assistant_tool.rs`**:
+        -   **Purpose**: Defines the core `Tool` trait.
+        -   **`Tool` Trait**: The central abstraction. It requires methods for metadata (`name`, `description`), defining an `input_schema` for the LLM, checking if the tool `needs_confirmation`, and the main `run` method which returns an async `ToolResult`.
+    -   **`src/tool_schema.rs`**:
+        -   **Purpose**: Provides helper functions to adapt a tool's JSON schema to the specific requirements of different LLM provider APIs (e.g., OpenAI vs. Google), ensuring compatibility.
+    -   **`src/tool_registry.rs`**:
+        -   **Purpose**: Defines the `ToolRegistry`, a global singleton that holds all built-in, statically available tools.
+    -   **`src/tool_working_set.rs`**:
+        -   **Purpose**: Defines the `ToolWorkingSet`, a dynamic collection of tools that augments the global registry, typically with tools from extensions. It includes logic to resolve naming conflicts.
+    -   **`src/outline.rs`**:
+        -   **Purpose**: A utility function, `file_outline`, that gets the symbol outline for a file. This is used by other tools to handle large files by providing a summary to the LLM instead of the full content.
+---
+### Crate-Level Analysis: `assistant_tools`
+
+This section provides a detailed, file-by-file analysis of the `assistant_tools` crate.
+
+-   **`crates/assistant_tools`**
+    -   **Description**: This crate contains the library of concrete implementations of the `Tool` trait defined in `assistant_tool`. While `assistant_tool` defines the framework, this crate provides the actual, usable tools for the original agent.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**: `assistant_tool` (which it implements), `handlebars` and `rust-embed` (for prompt templating), `diffy` (for diffing), and `web_search`.
+    -   **`src/assistant_tools.rs`**:
+        -   **Purpose**: The main library entry point. Its `init` function is responsible for instantiating every built-in tool and registering it with the global `ToolRegistry`.
+    -   **Tool Subdirectories (e.g., `read_file_tool/`, `edit_file_tool/`)**:
+        -   **Structure**: Each tool is organized into its own module, often containing a `description.md` file that is embedded into the binary.
+        -   **`read_file_tool.rs`**: A good example of a simple tool. It implements the `Tool` trait, defines a `JsonSchema` for its inputs, and includes logic to handle large files by using the `outline` utility. It also performs security checks against configured private files.
+        -   **`edit_file_tool.rs`**: A more complex tool that acts as a facade for a specialized `EditAgent` sub-system. It shows how complex operations can be encapsulated behind the simple `Tool` interface. It requires user confirmation for potentially dangerous edits (e.g., to config files).
