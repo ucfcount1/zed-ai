@@ -418,3 +418,81 @@ This section provides a detailed, file-by-file analysis of the `assistant_tools`
         -   **Structure**: Each tool is organized into its own module, often containing a `description.md` file that is embedded into the binary.
         -   **`read_file_tool.rs`**: A good example of a simple tool. It implements the `Tool` trait, defines a `JsonSchema` for its inputs, and includes logic to handle large files by using the `outline` utility. It also performs security checks against configured private files.
         -   **`edit_file_tool.rs`**: A more complex tool that acts as a facade for a specialized `EditAgent` sub-system. It shows how complex operations can be encapsulated behind the simple `Tool` interface. It requires user confirmation for potentially dangerous edits (e.g., to config files).
+---
+### Crate-Level Analysis: `cloud_api_client`
+
+This section provides a detailed, file-by-file analysis of the `cloud_api_client` crate.
+
+-   **`crates/cloud_api_client`**
+    -   **Description**: The client-side implementation for interacting with Zed's backend cloud services. It manages user credentials and handles both standard HTTP requests and real-time WebSocket communication.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**: `cloud_api_types` (defines the data structures), `http_client` (for HTTP requests), and `yawc` (a WebSocket client library).
+    -   **`src/cloud_api_client.rs`**:
+        -   **Purpose**: Defines the main `CloudApiClient` struct.
+        -   **Logic**: Manages user credentials (`user_id` and `access_token`). Provides methods for making authenticated HTTP requests to the backend (e.g., `get_authenticated_user`, `create_llm_token`). Contains the `connect` method which establishes a persistent WebSocket connection to the cloud server for real-time messages.
+    -   **`src/websocket.rs`**:
+        -   **Purpose**: Defines the `Connection` struct which wraps an active WebSocket connection.
+        -   **Logic**: The `spawn` method starts a background task that manages the connection. This task sends periodic keepalive pings and listens for incoming binary messages, which it deserializes from CBOR into `MessageToClient` types and forwards to the rest of the application.
+---
+### Crate-Level Analysis: `cloud_api_types`
+
+This section provides a detailed, file-by-file analysis of the `cloud_api_types` crate.
+
+-   **`crates/cloud_api_types`**
+    -   **Description**: A "types" crate that defines the data contract for Zed's cloud API. It contains only data structures and no client or server logic, allowing it to be shared between the client and server codebases.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**: `serde` and `ciborium`. This confirms its purpose is to define serializable data structures, using the efficient CBOR format for its WebSocket protocol.
+    -   **`src/cloud_api_types.rs`**:
+        -   **Purpose**: Defines the data structures for the HTTP-based parts of the API, such as `GetAuthenticatedUserResponse` and `PlanInfo`, which are serialized as JSON.
+    -   **`src/websocket_protocol.rs`**:
+        -   **Purpose**: Defines the protocol for the real-time WebSocket connection.
+        -   **`MessageToClient` Enum**: The core of the protocol. It defines all possible messages the server can push to the client (e.g., `UserUpdated`). The `serialize` and `deserialize` methods use `ciborium` to encode messages in the CBOR format.
+---
+### Crate-Level Analysis: `cloud_llm_client`
+
+This section provides a detailed, file-by-file analysis of the `cloud_llm_client` crate.
+
+-   **`crates/cloud_llm_client`**
+    -   **Description**: Another "types" crate that defines the data contract specifically for Zed's own cloud LLM gateway service. It does not contain a client implementation but provides the shared data structures and constants used by the client and server.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**: `serde`, confirming its role is to define serializable data structures.
+    -   **`src/cloud_llm_client.rs`**:
+        -   **Purpose**: Contains all the type definitions for the LLM gateway.
+        -   **Constants**: Defines numerous HTTP header names (e.g., `X-ZED-VERSION`, `X-ZED-PLAN`) used to pass metadata between the client and the gateway.
+        -   **Data Structures**: Defines structs for the bodies of various API requests and responses, such as `CompletionBody` (a generic request to be proxied to an underlying model), `PredictEditsBody`, and `WebSearchBody`. It also defines the `Plan` enum, which centralizes the business logic for subscription quotas.
+---
+### Crate-Level Analysis: `copilot`
+
+This section provides a detailed, file-by-file analysis of the `copilot` crate.
+
+-   **`crates/copilot`**
+    -   **Description**: This crate provides a complete integration with GitHub Copilot, handling the language server lifecycle, authentication, and providing inline completion suggestions to the editor.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**: `node_runtime` (to manage the Copilot Node.js language server), `lsp` (to communicate with the server), and `edit_prediction` (to provide suggestions to the UI).
+    -   **`src/copilot.rs`**:
+        -   **Purpose**: The central orchestrator. Defines the `Copilot` struct, a global singleton that manages the server's state (`Starting`, `Running`, `Error`, etc.).
+        -   **Logic**: It handles starting the server process, managing buffer synchronization (`didOpen`, `didChange`), and exposing the public API for requesting completions.
+    -   **`src/sign_in.rs`**:
+        -   **Purpose**: Provides the UI and high-level logic for the GitHub device authentication flow.
+        -   **Logic**: It orchestrates the process of calling the server to get a device code, presenting that code to the user in a modal (`CopilotCodeVerification`), and waiting for the user to authorize in the browser.
+    -   **`src/copilot_completion_provider.rs`**:
+        -   **Purpose**: The bridge between the Copilot service and Zed's UI.
+        -   **Logic**: It implements the `EditPredictionProvider` trait. Its `refresh` method calls the `copilot` client to fetch suggestions, and its `suggest` method formats them into the "ghost text" `EditPrediction` that the editor can render.
+---
+### Crate-Level Analysis: `deepseek`
+
+This section provides a detailed, file-by-file analysis of the `deepseek` crate.
+
+-   **`crates/deepseek`**
+    -   **Description**: A dedicated, low-level, and self-contained client for the DeepSeek Chat Completions API, similar in structure to the `anthropic` crate.
+    -   **`Cargo.toml`**:
+        -   **Purpose**: The crate's manifest file.
+        -   **Key Dependencies**: `http_client` and `serde`, confirming its role as an HTTP client that handles JSON data.
+    -   **`src/deepseek.rs`**:
+        -   **Purpose**: Contains the complete implementation of the API client.
+        -   **Data Structures**: Defines Rust structs (`Request`, `Response`, `StreamResponse`) that map directly to the JSON objects of the DeepSeek API.
+        -   **API Function**: Provides a `stream_completion` async function that handles making the authenticated HTTP request and parsing the Server-Sent Event (SSE) stream to yield completion events.
