@@ -496,3 +496,84 @@ This section provides a detailed, file-by-file analysis of the `deepseek` crate.
         -   **Purpose**: Contains the complete implementation of the API client.
         -   **Data Structures**: Defines Rust structs (`Request`, `Response`, `StreamResponse`) that map directly to the JSON objects of the DeepSeek API.
         -   **API Function**: Provides a `stream_completion` async function that handles making the authenticated HTTP request and parsing the Server-Sent Event (SSE) stream to yield completion events.
+
+---
+### Crate: `crates/editor`
+
+**Crate Description:** The `editor` crate is the heart of the Zed application, providing the core text editing component. It is responsible for rendering the text, handling user input, managing selections and cursors, and integrating with a vast array of features like LSP, Git, diagnostics, code completion, and AI-powered edit predictions. It's a highly complex and central piece of the application's architecture.
+
+**`Cargo.toml` Analysis:**
+*   **Dependencies:** The `Cargo.toml` reveals a massive list of workspace dependencies, confirming its central role. It depends on `gpui` for UI, `text` and `multi_buffer` for text storage, `language` and `lsp` for language features, `git` for version control, `project` and `workspace` for project management, and numerous other utility crates.
+*   **Features:** It defines a `test-support` feature, which is common in Zed crates to enable test-specific code and dependencies.
+
+**Source File Analysis (`src/`):**
+*   `editor.rs`: This is the main file, defining the `Editor` struct. It orchestrates all editor functionality, including input handling, selection management, rendering, and feature integration. It's the central hub that connects all other modules within this crate.
+*   `editor_settings.rs`: Defines all user-configurable settings for the editor, from cursor style and font choices to the behavior of features like the minimap and scrollbars. It supports deserialization from JSON and includes a compatibility layer for importing settings from VS Code.
+*   `editor_settings_controls.rs`: Provides the UI controls (dropdowns, checkboxes, etc.) for the settings defined in `editor_settings.rs`. It uses the `EditableSettingControl` trait to link UI elements to the underlying settings, allowing users to modify their configuration graphically from the settings panel.
+*   `actions.rs`: This file defines every command or "action" that the editor can perform, such as `MoveLeft`, `SelectAll`, `ToggleComments`, or `GoToDefinition`. These actions are defined as structs and are used by the keybinding system to trigger editor functionality.
+*   `display_map/`: This module and its sub-modules are responsible for the complex logic of mapping the raw text data from the buffer to what is actually displayed on screen. This includes handling soft wraps, code folding, inlay hints, and other visual transformations.
+*   `git/`: This module contains the Git integration features, most notably the logic for displaying `git blame` information in the gutter or inline.
+*   `scroll/`: This module manages all scrolling logic, including autoscrolling and scrollbar behavior.
+*   **Other Feature Files**: Numerous other files implement specific editor features, such as `highlight_matching_bracket.rs` (bracket matching), `hover_popover.rs` (hover tooltips), `inlay_hint_cache.rs` (LSP inlay hints), and `signature_help.rs` (function signature popups).
+*   **Test Files**: Files like `editor_tests.rs` and `code_completion_tests.rs` contain the unit and integration tests for the editor's functionality.
+
+---
+
+### Crate: `crates/explorer_command_injector`
+
+**Crate Description:** This is a Windows-specific crate whose sole purpose is to add an "Open with Zed" option to the context menu in the Windows File Explorer.
+
+**`Cargo.toml` Analysis:**
+*   **Dependencies:** The dependencies are specific to Windows (`windows`, `windows-core`, `windows-registry`), confirming its platform-specific nature.
+*   **Crate Type:** It's compiled as a `cdylib` (C-style dynamic library), which is necessary for it to be loaded as a shell extension by Windows Explorer.
+
+**Source File Analysis (`src/`):**
+*   `explorer_command_injector.rs`: This single file contains all the logic. It implements the necessary Windows COM (Component Object Model) interfaces (`IExplorerCommand` and `IClassFactory`) required to register a custom command.
+    *   **`IExplorerCommand::GetTitle`**: Returns the text for the menu item (e.g., "Open with Zed Preview").
+    *   **`IExplorerCommand::GetIcon`**: Returns the path to the Zed executable to use as the menu item's icon.
+    *   **`IExplorerCommand::Invoke`**: This is the core logic. When the user clicks the menu item, this method is called. It retrieves the paths of the selected files/folders and spawns a `Zed.exe` process for each one.
+
+---
+
+### Crate: `crates/file_finder`
+
+**Crate Description:** This crate provides the fuzzy file finder functionality (often invoked via `Cmd-P` or `Ctrl-P`), allowing users to quickly search for and open files within a project.
+
+**`Cargo.toml` Analysis:**
+*   **Dependencies:** Key dependencies include `fuzzy` for the matching algorithm, `picker` for the generic UI component that displays the list of results, `project` to get the list of files, and `workspace` to open the selected file.
+
+**Source File Analysis (`src/`):**
+*   `file_finder.rs`: Contains the main logic for the file finder.
+    *   **`FileFinderDelegate`**: This is the core logical component. It implements the `PickerDelegate` trait, connecting the file search logic to the generic `Picker` UI. It handles receiving user queries, spawning asynchronous search tasks, and rendering the results. It also manages a list of recently opened files to display as history.
+*   `file_finder_settings.rs`: Defines the user-configurable settings for the file finder, such as whether to show file icons and the width of the modal.
+*   `open_path_prompt.rs`: Implements a more traditional file dialog prompt (`OpenPathPrompt`) for cases where the user needs to open a specific file or save a new file. It allows for interactive navigation of the filesystem directory by directory.
+
+---
+
+### Crate: `crates/fs`
+
+**Crate Description:** This crate provides a comprehensive, asynchronous, and cross-platform abstraction over the file system. It offers a unified API for file operations and, crucially, for monitoring file system events (watching for changes).
+
+**`Cargo.toml` Analysis:**
+*   **Dependencies:** Relies on `ignore` for `.gitignore` handling and `git` for repository interactions.
+*   **Platform-Specific Dependencies:** It uses `fsevent` on macOS and `notify` on other platforms (Linux, Windows) for efficient, native file system watching. This conditional compilation is a core part of its design.
+
+**Source File Analysis (`src/`):**
+*   `fs.rs`: Defines the core `Fs` trait, which specifies the public API for all filesystem operations (`create_dir`, `load`, `watch`, etc.). It contains the `RealFs` implementation for actual filesystem interaction and a `FakeFs` for isolated testing.
+*   `fs_watcher.rs`: Contains the file watcher implementation for **non-macOS** platforms, built on top of the `notify` crate. It uses a global watcher to efficiently monitor multiple paths.
+*   `mac_watcher.rs`: Contains the macOS-specific file watcher implementation, built directly on the `fsevent` crate, which wraps Apple's native FSEvents API for high performance.
+
+---
+
+### Crate: `crates/fsevent`
+
+**Crate Description:** This is a low-level, macOS-specific utility crate that provides a safe Rust wrapper around Apple's native FSEvents API. It is used by the `fs` crate to implement file system watching on macOS.
+
+**`Cargo.toml` Analysis:**
+*   **Dependencies:** The dependencies are exclusively for macOS, using `core-foundation` and `fsevent-sys`. `fsevent-sys` provides the raw, unsafe FFI bindings, and this crate builds a safe API on top of them.
+
+**Source File Analysis (`src/`):**
+*   `fsevent.rs`: The single implementation file.
+    *   **`EventStream`**: The core struct that manages an FSEvents stream. It takes a list of paths to watch and a callback to execute when events occur.
+    *   **`Handle`**: A handle that stops the event stream when dropped, ensuring clean resource management.
+    *   **`trampoline` function**: A C-style callback that bridges the gap between the C-based FSEvents API and the Rust callback provided by the user. It also includes logic to handle dropped events to ensure reliability.
