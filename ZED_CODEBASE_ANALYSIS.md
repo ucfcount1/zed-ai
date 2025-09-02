@@ -88,6 +88,7 @@ This section provides a detailed, file-by-file analysis of the `action_log` crat
             -   `clock`: Indicates that logged actions are timestamped.
             -   `gpui`: It is a `gpui` entity, meaning it's integrated into the core application state.
     -   **`src/action_log.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/action_log/src/action_log.rs
         -   **Purpose**: Contains the core logic for the action logging system. It defines the data structures for tracking buffer states and the history of edits.
         -   **Key Structs**:
             -   `ActionLog`: The main entity that manages a collection of tracked buffers. It serves as the primary interface for logging actions.
@@ -110,6 +111,7 @@ This section provides a detailed, file-by-file analysis of the `activity_indicat
             -   `gpui`, `ui`: Confirms this is a UI component built with Zed's `gpui` framework.
             -   `auto_update`, `extension_host`, `project`: Shows that the indicator listens to events from various background systems to know when to display status messages.
     -   **`src/activity_indicator.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/activity_indicator/src/activity_indicator.rs
         -   **Purpose**: Contains the complete implementation of the activity indicator UI component.
         -   **Key Structs**:
             -   `ActivityIndicator`: The main UI component, which is a `StatusItemView` designed to be rendered in the status bar. It aggregates status information from multiple sources.
@@ -134,42 +136,51 @@ This section provides a detailed, file-by-file analysis of the `agent` crate.
             -   `sqlez`, `heed`: Uses two different database backends for persistence.
             -   `action_log`: Depends on the action log to track its own file modifications and stay aware of user edits.
     -   **`src/agent.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent/src/agent.rs
         -   **Purpose**: The main library entry point for the `agent` crate. It acts as a facade, organizing the crate's functionality into a set of cohesive modules and re-exporting the most important public types.
         -   **Key Modules**: `agent_profile`, `context`, `context_store`, `thread`, `thread_store`, `tool_use`.
         -   **`init` function**: Initializes the `thread_store`, which sets up the necessary databases and global state for persisting conversation threads.
     -   **`src/agent_profile.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent/src/agent_profile.rs
         -   **Purpose**: Defines and manages "Agent Profiles," which are user-configurable personalities that control an agent's capabilities, primarily by enabling or disabling specific tools.
         -   **`AgentProfile` Struct**: Represents a single active profile, identified by an ID and holding a reference to the master `ToolWorkingSet`.
         -   **Key Functions**:
             -   `enabled_tools()`: The core logic of a profile. It filters the master list of all available tools against the current profile's settings to determine which tools are active for the current conversation. **Output**: A `Vec` of enabled `Tool` trait objects.
     -   **`src/context.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent/src/context.rs
         -   **Purpose**: Defines the data structures for the various *types* of context that can be sent to the agent (e.g., files, symbols, selections, images).
         -   **`AgentContext` Enum**: Represents a fully *loaded* piece of context, containing the actual text or image data ready to be formatted for the LLM.
         -   **`load_context` Function**: The main orchestrator for preparing context. **Input**: A `Vec` of lightweight `AgentContextHandle`s. **Logic**: It asynchronously loads the content for each handle and formats it into a single XML-like string and a list of images. **Output**: A `Task` that resolves to the final formatted context.
     -   **`src/context_store.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent/src/context_store.rs
         -   **Purpose**: Provides the `ContextStore`, a stateful manager that holds the set of all context items the user has "attached" to the current conversation.
         -   **`ContextStore` Struct**: The central entity that manages the collection of active context items. Its primary field is a `context_set` which prevents duplicate context items from being added.
         -   **Key Functions**:
             -   `add_file_from_path()`, `add_symbol()`, etc.: The public API used by the UI to add context items to the store.
             -   `new_context_for_thread()`: An important function that gets the list of context items from the store that have not yet been sent to the LLM in the current conversation, preventing redundancy.
     -   **`src/thread.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent/src/thread.rs
         -   **Purpose**: Defines the `Thread` entity, which is the live, in-memory representation of a single conversation.
         -   **`Thread` Struct**: A large, stateful object that holds the entire history of messages, the state of any tool calls (`ToolUseState`), a reference to the project and action log, and the current agent profile and model.
         -   **Key Functions**:
             -   `send_to_model()`: The main entry point for generating an agent response. It builds the `LanguageModelRequest`, sends it to the model, and streams the response back, handling text, tool calls, and errors.
             -   `to_completion_request()`: Assembles the full history of messages, context, and tool results into the final payload to be sent to the LLM.
     -   **`src/thread_store.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent/src/thread_store.rs
         -   **Purpose**: Manages the persistence of conversation threads to a local database.
         -   **`ThreadStore` Struct**: The high-level manager for creating, loading, and deleting threads.
         -   **`ThreadsDatabase` Struct**: An abstraction over a SQLite database that handles the actual saving and loading of serialized `Thread` objects. It also contains logic for migrating from an older database format.
     -   **`src/tool_use.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent/src/tool_use.rs
         -   **Purpose**: Provides the `ToolUseState` struct, which is a state machine for managing the entire lifecycle of all tool calls within a thread.
         -   **`ToolUseState` Struct**: Tracks pending tool calls, completed tool results, and rich UI cards for displaying tool output.
         -   **`PendingToolUseStatus` Enum**: A state machine (`Idle`, `NeedsConfirmation`, `Running`, `Error`) for a single in-flight tool call.
     -   **`src/history_store.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent/src/history_store.rs
         -   **Purpose**: Manages the user's agent-related history by combining saved conversation threads and other context items into a single, chronologically sorted list for the UI.
         -   **`HistoryStore` Struct**: The main entity that fetches items from the `ThreadStore` and other context stores to create a unified history.
     -   **`src/context_server_tool.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent/src/context_server_tool.rs
         -   **Purpose**: Defines a generic `Tool` implementation that acts as a proxy for tools provided by an external "context server" (i.e., a third-party extension).
         -   **`ContextServerTool` Struct**: A wrapper that implements the `Tool` trait but delegates the actual execution to an external process via RPC.
         -   **`run` Function**: The core logic that sends a `CallTool` request to the appropriate context server and returns its result.
@@ -190,8 +201,10 @@ This section provides a detailed, file-by-file analysis of the `agent2` crate.
             -   `sqlez`: Used for database interactions, specifically for conversation history.
             -   `schemars`, `serde_json`: Used heavily in the new tool system to generate JSON schemas for tool inputs, which are then provided to the LLM.
     -   **`src/agent2.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent2/src/agent2.rs
         -   **Purpose**: The main library entry point for the `agent2` crate. It primarily re-exports the key public types from its various modules, such as `NativeAgent`, `NativeAgentConnection`, `HistoryStore`, and `Templates`, to make them accessible to other parts of the application.
     -   **`src/agent.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent2/src/agent.rs
         -   **Purpose**: Contains the definition of `NativeAgent`, the central orchestrator for the new agent. This is where the main conversational loop and tool-dispatching logic reside.
         -   **`NativeAgent` Struct**: The core state machine for the agent. It holds references to the project, history store, tool definitions, and the active language model client.
         -   **Key Functions**:
@@ -199,26 +212,32 @@ This section provides a detailed, file-by-file analysis of the `agent2` crate.
             -   `query(...)`: The main entry point for processing a user's prompt. It constructs the request, sends it to the language model, and then streams the response. It handles both text generation and the new, structured `tool_calls`.
             -   `dispatch_tool_call(...)`: A crucial function that takes a `tool_call` from the LLM, finds the corresponding `AgentTool` implementation, deserializes the input, and executes the tool's `run` method.
     -   **`src/db.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent2/src/db.rs
         -   **Purpose**: Defines the database schema for storing conversation history using the `sqlez` library.
         -   **`Db` Struct**: A wrapper around a `sqlez::Connection` that provides high-level methods for database operations.
         -   **Key Functions**: `save_thread`, `load_thread`, `load_all_threads`. These functions handle the serialization of conversation state to and from the SQLite database.
     -   **`src/history_store.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent2/src/history_store.rs
         -   **Purpose**: Provides the `HistoryStore` entity, which acts as a cache and manager for conversation history. It bridges the gap between the in-memory representation of conversations (`thread.rs`) and the database persistence layer (`db.rs`).
     -   **`src/thread.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent2/src/thread.rs
         -   **Purpose**: Defines the `Thread` struct, which represents a single, live conversation. Unlike the old agent, this `Thread` is more focused on the sequence of messages and tool interactions rather than being a monolithic state object.
         -   **`Thread` Struct**: Holds a `Vec<Message>`, where `Message` is an enum that can be from the user, the assistant, or a tool result.
         -   **`ToolCall` and `ToolResult` Structs**: These are structured representations of tool interactions, making the conversation history much more explicit and machine-readable compared to the previous agent's XML-based approach.
     -   **`src/tools.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent2/src/tools.rs
         -   **Purpose**: Acts as a facade and registry for all the tools available to the `NativeAgent`.
         -   **`Tools` Struct**: Holds an `Arc` for each available tool.
         -   **`new(...)` Function**: The constructor that instantiates every single `AgentTool` implementation (e.g., `ReadFileTool`, `TerminalTool`) and stores them. This is where the agent's full capability set is defined.
         -   **`dispatch(...)` Function**: The central tool dispatch logic. It takes a tool name and its input as raw JSON, looks up the correct tool implementation, and calls its `run` method.
-    -   **`src/tools/` (Directory)**:
+    -   **`src/tools/read_file_tool.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent2/src/tools/read_file_tool.rs
         -   **Purpose**: Contains the modular, individual implementations of each `AgentTool`. This is a major architectural improvement.
         -   **`AgentTool` Trait**: Each tool implements this trait, which defines a standard interface with methods like `name()`, `kind()`, `run()`, and an associated `Input` type with a `JsonSchema`.
         -   **`read_file_tool.rs`**: An implementation of the `read_file` tool. It handles reading files (including partial reads with line ranges), generating outlines for large files, and checking security settings (`file_scan_exclusions`, `private_files`).
         -   **`terminal_tool.rs`**: An implementation of the `terminal` tool. It executes shell commands, requires user authorization for security, and ensures commands are run within the context of a project worktree.
     -   **`src/native_agent_server.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent2/src/native_agent_server.rs
         -   **Purpose**: Implements the `agent_servers::AgentServer` trait for the `NativeAgent`. This is the glue code that allows the main Zed application to discover, create, and communicate with the `agent2` implementation.
         -   **`connect(...)` Function**: The factory method that gets called by the application to start an agent session. It creates the `NativeAgent` instance and wraps it in a `NativeAgentConnection`, which adapts it to the application's generic agent communication protocol (`acp_thread::AgentConnection`).
 ---
@@ -235,15 +254,19 @@ This section provides a detailed, file-by-file analysis of the `agent_servers` c
             -   `context_server`: Indicates it can interact with the extension system's tool-providing servers.
             -   `reqwest_client`: Optional dependency for making HTTP requests, likely for API-based agents.
     -   **`src/agent_servers.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent_servers/src/agent_servers.rs
         -   **Purpose**: The main library entry point. It defines the central `AgentServer` trait and provides helper utilities for managing external agent processes.
         -   **`AgentServer` Trait**: The core abstraction. It defines the contract for any agent provider, requiring methods for UI metadata (`name`, `logo`) and, most importantly, a `connect` method that returns a live `AgentConnection`.
         -   **`AgentServerCommand` Struct**: A helper for defining and finding executables for command-line based agents, with a robust resolution strategy (settings -> PATH -> fallback).
     -   **`src/claude.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent_servers/src/claude.rs
         -   **Purpose**: A concrete `AgentServer` implementation for the external `@anthropic-ai/claude-code` CLI tool.
         -   **Logic**: It demonstrates the full lifecycle: spawning the `claude` process, communicating with it over `stdio` using a streaming JSON protocol, and translating its custom protocol into the standard `AcpThread` events that the Zed UI understands.
     -   **`src/claude/tools.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent_servers/src/claude/tools.rs
         -   **Purpose**: Defines the mapping from the Claude agent's specific tool-use format into Zed's internal, standardized `acp::ToolCall` representation. It acts as a translation layer.
     -   **`src/claude/mcp_server.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent_servers/src/claude/mcp_server.rs
         -   **Purpose**: Implements the local proxy server that securely exposes Zed's functionality to the external Claude agent process. This is the key to the entire integration.
         -   **`ClaudeZedMcpServer` Struct**: Wraps a generic `context_server::listener::McpServer`, showing that this functionality is built on a reusable framework.
         -   **Key Functions**:
@@ -251,9 +274,11 @@ This section provides a detailed, file-by-file analysis of the `agent_servers` c
             -   `server_config()`: Constructs the configuration for the Claude CLI. It tells the CLI how to connect back to this server: by spawning the main Zed executable with special arguments (`--nc <socket_path>`) to make a tool call. This isolates tool execution in a separate process.
             -   `handle_initialize()`: A standard LSP-style handler that advertises the server's `ToolsCapabilities` to the client.
     -   **`src/custom.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent_servers/src/custom.rs
         -   **Purpose**: A generic `AgentServer` implementation for user-defined agents.
         -   **Logic**: It's a lightweight wrapper that takes a name and a command from user settings and uses a generic helper function (`crate::acp::connect`) to handle the process spawning and communication. This makes the system highly extensible.
     -   **`src/settings.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent_servers/src/settings.rs
         -   **Purpose**: Defines the data structures for configuring all agent servers in `settings.json`.
         -   **`AllAgentServersSettings` Struct**: The top-level settings object. It has dedicated fields for `claude` and `gemini` and uses `#[serde(flatten)]` on a `HashMap` to allow users to define an arbitrary number of custom agents with a clean JSON structure.
 ---
@@ -269,10 +294,12 @@ This section provides a detailed, file-by-file analysis of the `agent_settings` 
             -   `settings`, `schemars`, `serde`: Confirms its role is to define serializable setting structures for Zed's configuration system.
             -   `language_model`: Indicates the settings are used to configure language models.
     -   **`src/agent_settings.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent_settings/src/agent_settings.rs
         -   **Purpose**: Defines the main `AgentSettings` struct, which consolidates all agent-related options.
         -   **`AgentSettings` vs. `AgentSettingsContent`**: It uses a standard Zed pattern where `AgentSettingsContent` (with `Option<T>` fields) is deserialized from JSON, and then merged into the `AgentSettings` struct which holds the final, concrete values with defaults applied.
         -   **Key Settings**: It defines a wide range of settings, including UI preferences (`dock`), model selection for different features (`default_model`, `inline_assistant_model`), and behavioral flags (`always_allow_tool_actions`).
     -   **`src/agent_profile.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent_settings/src/agent_profile.rs
         -   **Purpose**: Defines the data structures for "Agent Profiles."
         -   **`AgentProfileSettings` Struct**: The core of a profile. It contains a `tools` map (`IndexMap<Arc<str>, bool>`) that explicitly enables or disables built-in tools by name. It also has settings for controlling tools provided by extensions (`ContextServer`s), providing granular control over the agent's capabilities.
 ---
@@ -286,15 +313,19 @@ This section provides a detailed, file-by-file analysis of the `agent_ui` crate.
         -   **Purpose**: The crate's manifest file.
         -   **Key Dependencies**: Its extensive dependency list, including `gpui`, `ui`, `agent`, `agent2`, `agent_settings`, `agent_servers`, `editor`, and `workspace`, confirms its role as a central UI hub.
     -   **`src/agent_ui.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent_ui/src/agent_ui.rs
         -   **Purpose**: The main library entry point. It defines a vast number of `gpui::Action`s for all agent-related commands, initializes all UI components and their dependencies, and sets up observers to react to settings changes.
         -   **`ExternalAgent` Enum**: Contains a factory `server()` method that the UI uses to select and instantiate the correct agent backend (e.g., native, Claude, custom) when a user starts a conversation.
     -   **`src/agent_panel.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent_ui/src/agent_panel.rs
         -   **Purpose**: Defines the `AgentPanel`, the main `gpui` component and view controller for the agent side panel.
         -   **`ActiveView` Enum**: It acts as a state machine, using this enum to switch between different sub-views like the conversation thread (`AcpThreadView`), history, or settings. Its `render` method is a dispatcher that decides which sub-view to render.
     -   **`src/acp/thread_view.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent_ui/src/acp/thread_view.rs
         -   **Purpose**: Defines `AcpThreadView`, the component for rendering conversations with modern, ACP-based agents (like `agent2` and Claude).
         -   **Logic**: It's a stateful component that manages the connection to the agent, listens for real-time events from the `AcpThread` to update the display, and renders different entry types (user messages, assistant responses, tool calls) with specialized views, creating the rich, interactive chat experience.
     -   **`src/agent_configuration/manage_profiles_modal.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/agent_ui/src/agent_configuration/manage_profiles_modal.rs
         -   **Purpose**: Defines the `ManageProfilesModal` for viewing, creating, and configuring agent profiles.
         -   **Logic**: It's a state machine that presents different UI screens for listing profiles, creating new ones, and embedding a `ToolPicker` component to let users enable or disable specific tools for a given profile. It reads from and writes to the `AgentSettings`.
 ---
@@ -308,12 +339,15 @@ This section provides a detailed, file-by-file analysis of the `ai_onboarding` c
         -   **Purpose**: The crate's manifest file.
         -   **Key Dependencies**: `gpui`, `ui`, `client`, `cloud_llm_client`. This confirms its role as a UI crate that is aware of the user's account status.
     -   **`src/ai_onboarding.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/ai_onboarding/src/ai_onboarding.rs
         -   **Purpose**: Defines the main `ZedAiOnboarding` component, which acts as a state machine.
         -   **Logic**: It checks the user's sign-in status and subscription plan (`Free`, `Trial`, `Pro`) and calls a specific `render_*` method to display the appropriate UI, such as a prompt to sign in, an offer to start a trial, or a summary of Pro features.
     -   **`src/agent_panel_onboarding_content.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/ai_onboarding/src/agent_panel_onboarding_content.rs
         -   **Purpose**: Defines the `AgentPanelOnboarding` component, which is the specific UI that gets embedded into the main agent panel.
         -   **Logic**: It composes the main `ZedAiOnboarding` component with other elements, such as a prompt for the user to add their own third-party API keys if they don't have a Zed Pro subscription. It subscribes to the `LanguageModelRegistry` to dynamically update when the user configures new providers.
     -   **`src/plan_definitions.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/ai_onboarding/src/plan_definitions.rs
         -   **Purpose**: A simple, stateless component that centralizes the marketing copy for the different AI plans.
         -   **Logic**: It contains methods like `free_plan()` and `pro_trial()` that return `gpui` `List` elements with hardcoded bullet points describing the features of each plan.
 ---
@@ -327,6 +361,7 @@ This section provides a detailed, file-by-file analysis of the `anthropic` crate
         -   **Purpose**: The crate's manifest file.
         -   **Key Dependencies**: `http_client`, `serde`, `serde_json`. This confirms its role as an HTTP client that serializes/deserializes JSON data.
     -   **`src/anthropic.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/anthropic/src/anthropic.rs
         -   **Purpose**: Contains the complete implementation of the API client.
         -   **Data Structures**: The majority of the file defines Rust structs (`Request`, `Response`, `Message`, `Event`) that precisely mirror the JSON objects in the Anthropic API, using `serde` for conversion. The `Model` enum centralizes all known Anthropic model IDs and their properties.
         -   **API Functions**: It provides two main `async` functions: `complete` for making a single request and waiting for the full response, and `stream_completion` for initiating a streaming request and returning a `BoxStream` of events, which enables real-time "typing" effects in the UI.
@@ -337,11 +372,12 @@ This section provides a detailed, file-by-file analysis of the `anthropic` crate
 This section provides a detailed, file-by-file analysis of the `askpass` crate.
 
 -   **`crates/askpass`**
-    -   **Description**: A small utility crate that implements the `askpass` protocol. This is a standard mechanism used by command-line tools like `git` and `ssh` to request credentials (like a password or passphrase) from a user via a graphical interface instead of the terminal.
+    -   **Description**: A small utility crate that implements the `askpass` protocol. This is a standard mechanism used by command-line tools like `git` and `ssh` to request credentials (like a password or passphrase) from a graphical interface instead of the terminal.
     -   **`Cargo.toml`**:
         -   **Purpose**: The crate's manifest file.
         -   **Key Dependencies**: `net`, `tempfile`. These dependencies reveal the implementation strategy: it uses a Unix domain socket for inter-process communication and a temporary script file.
     -   **`src/askpass.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/askpass/src/askpass.rs
         -   **Purpose**: Contains the complete implementation of the `askpass` session logic.
         -   **`AskPassSession` Struct**: This is the main entry point. Its `new` method creates a Unix domain socket and spawns a background task to listen on it. It also generates a temporary shell script (`askpass.sh` or `askpass.ps1`).
         -   **The `askpass` Script**: This generated script is what external programs (like `git`) are configured to execute. The script simply runs the main `zed` executable with a special `--askpass` flag, pointing it to the socket path.
@@ -357,10 +393,12 @@ This section provides a detailed, file-by-file analysis of the `assistant_contex
         -   **Purpose**: The crate's manifest file.
         -   **Key Dependencies**: `project`, `workspace`, `language`, `assistant_slash_command`. This shows that context is deeply tied to the editor's core data structures and that slash commands are a primary way of manipulating this context.
     -   **`src/assistant_context.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/assistant_context/src/assistant_context.rs
         -   **Purpose**: Defines the `AssistantContext` struct, which represents a single context document.
         -   **`AssistantContext` Struct**: This struct is built around a `gpui::Buffer`, meaning the entire context is stored in a standard Zed text buffer. It overlays semantic meaning on top of this buffer using `message_anchors` and `messages_metadata` to track the conversation structure. It is responsible for parsing slash commands and generating the final prompt sent to the LLM.
         -   **Key Functions**: `assist` (sends the context to the LLM and streams the response back into the buffer), `to_completion_request` (converts the buffer's content into the format expected by the LLM), and `serialize`/`deserialize` (for persistence).
     -   **`src/context_store.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/assistant_context/src/context_store.rs
         -   **Purpose**: Defines the `ContextStore`, which manages the lifecycle of all `AssistantContext` instances within a project.
         -   **Logic**: It handles the creation of new contexts, loading/saving them from/to disk, and synchronizing them in collaborative sessions. It also integrates with the `ContextServerStore` to discover and register slash commands from extensions.
 ---
@@ -374,11 +412,14 @@ This section provides a detailed, file-by-file analysis of the `assistant_slash_
         -   **Purpose**: The crate's manifest file.
         -   **Key Dependencies**: `async-trait`, `extension`, `workspace`. This shows that slash commands are defined by an `async` trait and can be provided by extensions.
     -   **`src/assistant_slash_command.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/assistant_slash_command/src/assistant_slash_command.rs
         -   **Purpose**: Defines the core `SlashCommand` trait and the data structures for its inputs and outputs.
         -   **`SlashCommand` Trait**: The central abstraction. It requires methods for UI metadata (`name`, `description`), dynamic argument completion (`complete_argument`), and execution (`run`). The `run` method returns a stream of `SlashCommandEvent`s, allowing for rich, structured output.
     -   **`src/slash_command_registry.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/assistant_slash_command/src/slash_command_registry.rs
         -   **Purpose**: Defines the `SlashCommandRegistry`, a global, application-wide singleton for storing all built-in, statically available slash commands. It uses the `gpui::Global` pattern for easy access from anywhere in the application.
     -   **`src/slash_command_working_set.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/assistant_slash_command/src/slash_command_working_set.rs
         -   **Purpose**: Defines the `SlashCommandWorkingSet`, a dynamic, instance-specific collection of commands that augments the global registry.
         -   **Logic**: It implements a two-tiered lookup system, first checking its own set of commands (primarily from extensions) before falling back to the global registry. This allows for commands to be added and removed at runtime as extensions are enabled or disabled.
 ---
@@ -392,15 +433,20 @@ This section provides a detailed, file-by-file analysis of the `assistant_tool` 
         -   **Purpose**: The crate's manifest file.
         -   **Key Dependencies**: `language_model`, `project`, `serde_json`, `action_log`. This shows that tools are designed to be used by an LLM, operate on the project, use JSON for data, and log their actions for review.
     -   **`src/assistant_tool.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/assistant_tool/src/assistant_tool.rs
         -   **Purpose**: Defines the core `Tool` trait.
         -   **`Tool` Trait**: The central abstraction. It requires methods for metadata (`name`, `description`), defining an `input_schema` for the LLM, checking if the tool `needs_confirmation`, and the main `run` method which returns an async `ToolResult`.
     -   **`src/tool_schema.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/assistant_tool/src/tool_schema.rs
         -   **Purpose**: Provides helper functions to adapt a tool's JSON schema to the specific requirements of different LLM provider APIs (e.g., OpenAI vs. Google), ensuring compatibility.
     -   **`src/tool_registry.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/assistant_tool/src/tool_registry.rs
         -   **Purpose**: Defines the `ToolRegistry`, a global singleton that holds all built-in, statically available tools.
     -   **`src/tool_working_set.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/assistant_tool/src/tool_working_set.rs
         -   **Purpose**: Defines the `ToolWorkingSet`, a dynamic collection of tools that augments the global registry, typically with tools from extensions. It includes logic to resolve naming conflicts.
     -   **`src/outline.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/assistant_tool/src/outline.rs
         -   **Purpose**: A utility function, `file_outline`, that gets the symbol outline for a file. This is used by other tools to handle large files by providing a summary to the LLM instead of the full content.
 ---
 ### Crate-Level Analysis: `assistant_tools`
@@ -413,10 +459,15 @@ This section provides a detailed, file-by-file analysis of the `assistant_tools`
         -   **Purpose**: The crate's manifest file.
         -   **Key Dependencies**: `assistant_tool` (which it implements), `handlebars` and `rust-embed` (for prompt templating), `diffy` (for diffing), and `web_search`.
     -   **`src/assistant_tools.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/assistant_tools/src/assistant_tools.rs
         -   **Purpose**: The main library entry point. Its `init` function is responsible for instantiating every built-in tool and registering it with the global `ToolRegistry`.
-    -   **Tool Subdirectories (e.g., `read_file_tool/`, `edit_file_tool/`)**:
+    -   **`src/read_file_tool.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/assistant_tools/src/read_file_tool.rs
         -   **Structure**: Each tool is organized into its own module, often containing a `description.md` file that is embedded into the binary.
         -   **`read_file_tool.rs`**: A good example of a simple tool. It implements the `Tool` trait, defines a `JsonSchema` for its inputs, and includes logic to handle large files by using the `outline` utility. It also performs security checks against configured private files.
+    -   **`src/edit_file_tool.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/assistant_tools/src/edit_file_tool.rs
+        -   **Structure**: Each tool is organized into its own module, often containing a `description.md` file that is embedded into the binary.
         -   **`edit_file_tool.rs`**: A more complex tool that acts as a facade for a specialized `EditAgent` sub-system. It shows how complex operations can be encapsulated behind the simple `Tool` interface. It requires user confirmation for potentially dangerous edits (e.g., to config files).
 ---
 ### Crate-Level Analysis: `cloud_api_client`
@@ -429,9 +480,11 @@ This section provides a detailed, file-by-file analysis of the `cloud_api_client
         -   **Purpose**: The crate's manifest file.
         -   **Key Dependencies**: `cloud_api_types` (defines the data structures), `http_client` (for HTTP requests), and `yawc` (a WebSocket client library).
     -   **`src/cloud_api_client.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/cloud_api_client/src/cloud_api_client.rs
         -   **Purpose**: Defines the main `CloudApiClient` struct.
         -   **Logic**: Manages user credentials (`user_id` and `access_token`). Provides methods for making authenticated HTTP requests to the backend (e.g., `get_authenticated_user`, `create_llm_token`). Contains the `connect` method which establishes a persistent WebSocket connection to the cloud server for real-time messages.
     -   **`src/websocket.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/cloud_api_client/src/websocket.rs
         -   **Purpose**: Defines the `Connection` struct which wraps an active WebSocket connection.
         -   **Logic**: The `spawn` method starts a background task that manages the connection. This task sends periodic keepalive pings and listens for incoming binary messages, which it deserializes from CBOR into `MessageToClient` types and forwards to the rest of the application.
 ---
@@ -445,8 +498,10 @@ This section provides a detailed, file-by-file analysis of the `cloud_api_types`
         -   **Purpose**: The crate's manifest file.
         -   **Key Dependencies**: `serde` and `ciborium`. This confirms its purpose is to define serializable data structures, using the efficient CBOR format for its WebSocket protocol.
     -   **`src/cloud_api_types.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/cloud_api_types/src/cloud_api_types.rs
         -   **Purpose**: Defines the data structures for the HTTP-based parts of the API, such as `GetAuthenticatedUserResponse` and `PlanInfo`, which are serialized as JSON.
     -   **`src/websocket_protocol.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/cloud_api_types/src/websocket_protocol.rs
         -   **Purpose**: Defines the protocol for the real-time WebSocket connection.
         -   **`MessageToClient` Enum**: The core of the protocol. It defines all possible messages the server can push to the client (e.g., `UserUpdated`). The `serialize` and `deserialize` methods use `ciborium` to encode messages in the CBOR format.
 ---
@@ -460,6 +515,7 @@ This section provides a detailed, file-by-file analysis of the `cloud_llm_client
         -   **Purpose**: The crate's manifest file.
         -   **Key Dependencies**: `serde`, confirming its role is to define serializable data structures.
     -   **`src/cloud_llm_client.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/cloud_llm_client/src/cloud_llm_client.rs
         -   **Purpose**: Contains all the type definitions for the LLM gateway.
         -   **Constants**: Defines numerous HTTP header names (e.g., `X-ZED-VERSION`, `X-ZED-PLAN`) used to pass metadata between the client and the gateway.
         -   **Data Structures**: Defines structs for the bodies of various API requests and responses, such as `CompletionBody` (a generic request to be proxied to an underlying model), `PredictEditsBody`, and `WebSearchBody`. It also defines the `Plan` enum, which centralizes the business logic for subscription quotas.
@@ -474,12 +530,15 @@ This section provides a detailed, file-by-file analysis of the `copilot` crate.
         -   **Purpose**: The crate's manifest file.
         -   **Key Dependencies**: `node_runtime` (to manage the Copilot Node.js language server), `lsp` (to communicate with the server), and `edit_prediction` (to provide suggestions to the UI).
     -   **`src/copilot.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/copilot/src/copilot.rs
         -   **Purpose**: The central orchestrator. Defines the `Copilot` struct, a global singleton that manages the server's state (`Starting`, `Running`, `Error`, etc.).
         -   **Logic**: It handles starting the server process, managing buffer synchronization (`didOpen`, `didChange`), and exposing the public API for requesting completions.
     -   **`src/sign_in.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/copilot/src/sign_in.rs
         -   **Purpose**: Provides the UI and high-level logic for the GitHub device authentication flow.
         -   **Logic**: It orchestrates the process of calling the server to get a device code, presenting that code to the user in a modal (`CopilotCodeVerification`), and waiting for the user to authorize in the browser.
     -   **`src/copilot_completion_provider.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/copilot/src/copilot_completion_provider.rs
         -   **Purpose**: The bridge between the Copilot service and Zed's UI.
         -   **Logic**: It implements the `EditPredictionProvider` trait. Its `refresh` method calls the `copilot` client to fetch suggestions, and its `suggest` method formats them into the "ghost text" `EditPrediction` that the editor can render.
 ---
@@ -493,6 +552,7 @@ This section provides a detailed, file-by-file analysis of the `deepseek` crate.
         -   **Purpose**: The crate's manifest file.
         -   **Key Dependencies**: `http_client` and `serde`, confirming its role as an HTTP client that handles JSON data.
     -   **`src/deepseek.rs`**:
+        -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/deepseek/src/deepseek.rs
         -   **Purpose**: Contains the complete implementation of the API client.
         -   **Data Structures**: Defines Rust structs (`Request`, `Response`, `StreamResponse`) that map directly to the JSON objects of the DeepSeek API.
         -   **API Function**: Provides a `stream_completion` async function that handles making the authenticated HTTP request and parsing the Server-Sent Event (SSE) stream to yield completion events.
@@ -507,10 +567,18 @@ This section provides a detailed, file-by-file analysis of the `deepseek` crate.
 *   **Features:** It defines a `test-support` feature, which is common in Zed crates to enable test-specific code and dependencies.
 
 **Source File Analysis (`src/`):**
-*   `editor.rs`: This is the main file, defining the `Editor` struct. It orchestrates all editor functionality, including input handling, selection management, rendering, and feature integration. It's the central hub that connects all other modules within this crate.
-*   `editor_settings.rs`: Defines all user-configurable settings for the editor, from cursor style and font choices to the behavior of features like the minimap and scrollbars. It supports deserialization from JSON and includes a compatibility layer for importing settings from VS Code.
-*   `editor_settings_controls.rs`: Provides the UI controls (dropdowns, checkboxes, etc.) for the settings defined in `editor_settings.rs`. It uses the `EditableSettingControl` trait to link UI elements to the underlying settings, allowing users to modify their configuration graphically from the settings panel.
-*   `actions.rs`: This file defines every command or "action" that the editor can perform, such as `MoveLeft`, `SelectAll`, `ToggleComments`, or `GoToDefinition`. These actions are defined as structs and are used by the keybinding system to trigger editor functionality.
+*   `editor.rs`:
+    -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/editor/src/editor.rs
+    -   This is the main file, defining the `Editor` struct. It orchestrates all editor functionality, including input handling, selection management, rendering, and feature integration. It's the central hub that connects all other modules within this crate.
+*   `editor_settings.rs`:
+    -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/editor/src/editor_settings.rs
+    -   Defines all user-configurable settings for the editor, from cursor style and font choices to the behavior of features like the minimap and scrollbars. It supports deserialization from JSON and includes a compatibility layer for importing settings from VS Code.
+*   `editor_settings_controls.rs`:
+    -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/editor/src/editor_settings_controls.rs
+    -   Provides the UI controls (dropdowns, checkboxes, etc.) for the settings defined in `editor_settings.rs`. It uses the `EditableSettingControl` trait to link UI elements to the underlying settings, allowing users to modify their configuration graphically from the settings panel.
+*   `actions.rs`:
+    -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/editor/src/actions.rs
+    -   This file defines every command or "action" that the editor can perform, such as `MoveLeft`, `SelectAll`, `ToggleComments`, or `GoToDefinition`. These actions are defined as structs and are used by the keybinding system to trigger editor functionality.
 *   `display_map/`: This module and its sub-modules are responsible for the complex logic of mapping the raw text data from the buffer to what is actually displayed on screen. This includes handling soft wraps, code folding, inlay hints, and other visual transformations.
 *   `git/`: This module contains the Git integration features, most notably the logic for displaying `git blame` information in the gutter or inline.
 *   `scroll/`: This module manages all scrolling logic, including autoscrolling and scrollbar behavior.
@@ -528,7 +596,9 @@ This section provides a detailed, file-by-file analysis of the `deepseek` crate.
 *   **Crate Type:** It's compiled as a `cdylib` (C-style dynamic library), which is necessary for it to be loaded as a shell extension by Windows Explorer.
 
 **Source File Analysis (`src/`):**
-*   `explorer_command_injector.rs`: This single file contains all the logic. It implements the necessary Windows COM (Component Object Model) interfaces (`IExplorerCommand` and `IClassFactory`) required to register a custom command.
+*   `explorer_command_injector.rs`:
+    -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/explorer_command_injector/src/explorer_command_injector.rs
+    -   This single file contains all the logic. It implements the necessary Windows COM (Component Object Model) interfaces (`IExplorerCommand` and `IClassFactory`) required to register a custom command.
     *   **`IExplorerCommand::GetTitle`**: Returns the text for the menu item (e.g., "Open with Zed Preview").
     *   **`IExplorerCommand::GetIcon`**: Returns the path to the Zed executable to use as the menu item's icon.
     *   **`IExplorerCommand::Invoke`**: This is the core logic. When the user clicks the menu item, this method is called. It retrieves the paths of the selected files/folders and spawns a `Zed.exe` process for each one.
@@ -543,10 +613,16 @@ This section provides a detailed, file-by-file analysis of the `deepseek` crate.
 *   **Dependencies:** Key dependencies include `fuzzy` for the matching algorithm, `picker` for the generic UI component that displays the list of results, `project` to get the list of files, and `workspace` to open the selected file.
 
 **Source File Analysis (`src/`):**
-*   `file_finder.rs`: Contains the main logic for the file finder.
+*   `file_finder.rs`:
+    -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/file_finder/src/file_finder.rs
+    -   Contains the main logic for the file finder.
     *   **`FileFinderDelegate`**: This is the core logical component. It implements the `PickerDelegate` trait, connecting the file search logic to the generic `Picker` UI. It handles receiving user queries, spawning asynchronous search tasks, and rendering the results. It also manages a list of recently opened files to display as history.
-*   `file_finder_settings.rs`: Defines the user-configurable settings for the file finder, such as whether to show file icons and the width of the modal.
-*   `open_path_prompt.rs`: Implements a more traditional file dialog prompt (`OpenPathPrompt`) for cases where the user needs to open a specific file or save a new file. It allows for interactive navigation of the filesystem directory by directory.
+*   `file_finder_settings.rs`:
+    -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/file_finder/src/file_finder_settings.rs
+    -   Defines the user-configurable settings for the file finder, such as whether to show file icons and the width of the modal.
+*   `open_path_prompt.rs`:
+    -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/file_finder/src/open_path_prompt.rs
+    -   Implements a more traditional file dialog prompt (`OpenPathPrompt`) for cases where the user needs to open a specific file or save a new file. It allows for interactive navigation of the filesystem directory by directory.
 
 ---
 
@@ -559,9 +635,15 @@ This section provides a detailed, file-by-file analysis of the `deepseek` crate.
 *   **Platform-Specific Dependencies:** It uses `fsevent` on macOS and `notify` on other platforms (Linux, Windows) for efficient, native file system watching. This conditional compilation is a core part of its design.
 
 **Source File Analysis (`src/`):**
-*   `fs.rs`: Defines the core `Fs` trait, which specifies the public API for all filesystem operations (`create_dir`, `load`, `watch`, etc.). It contains the `RealFs` implementation for actual filesystem interaction and a `FakeFs` for isolated testing.
-*   `fs_watcher.rs`: Contains the file watcher implementation for **non-macOS** platforms, built on top of the `notify` crate. It uses a global watcher to efficiently monitor multiple paths.
-*   `mac_watcher.rs`: Contains the macOS-specific file watcher implementation, built directly on the `fsevent` crate, which wraps Apple's native FSEvents API for high performance.
+*   `fs.rs`:
+    -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/fs/src/fs.rs
+    -   Defines the core `Fs` trait, which specifies the public API for all filesystem operations (`create_dir`, `load`, `watch`, etc.). It contains the `RealFs` implementation for actual filesystem interaction and a `FakeFs` for isolated testing.
+*   `fs_watcher.rs`:
+    -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/fs/src/fs_watcher.rs
+    -   Contains the file watcher implementation for **non-macOS** platforms, built on top of the `notify` crate. It uses a global watcher to efficiently monitor multiple paths.
+*   `mac_watcher.rs`:
+    -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/fs/src/mac_watcher.rs
+    -   Contains the macOS-specific file watcher implementation, built directly on the `fsevent` crate, which wraps Apple's native FSEvents API for high performance.
 
 ---
 
@@ -573,7 +655,9 @@ This section provides a detailed, file-by-file analysis of the `deepseek` crate.
 *   **Dependencies:** The dependencies are exclusively for macOS, using `core-foundation` and `fsevent-sys`. `fsevent-sys` provides the raw, unsafe FFI bindings, and this crate builds a safe API on top of them.
 
 **Source File Analysis (`src/`):**
-*   `fsevent.rs`: The single implementation file.
+*   `fsevent.rs`:
+    -   **url**: https://raw.githubusercontent.com/ucfcount1/zed-ai/refs/heads/docs/project-documentation/crates/fsevent/src/fsevent.rs
+    -   The single implementation file.
     *   **`EventStream`**: The core struct that manages an FSEvents stream. It takes a list of paths to watch and a callback to execute when events occur.
     *   **`Handle`**: A handle that stops the event stream when dropped, ensuring clean resource management.
     *   **`trampoline` function**: A C-style callback that bridges the gap between the C-based FSEvents API and the Rust callback provided by the user. It also includes logic to handle dropped events to ensure reliability.
